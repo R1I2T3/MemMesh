@@ -30,8 +30,8 @@ class VectorStore:
         """
         self.uri = path or os.getenv("LANCEDB_PATH", "./data/lancedb")
 
-        # Ensure the directory exists if not using an S3 bucket
-        if not self.uri.startswith("s3://"):
+        # Ensure the directory exists if not using an object store like MinIO or AWS S3
+        if not self.uri.startswith(("s3://", "minio://")):
             os.makedirs(
                 os.path.dirname(self.uri) if os.path.dirname(self.uri) else ".",
                 exist_ok=True,

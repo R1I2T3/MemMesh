@@ -1,24 +1,33 @@
 import os
 import logging
 from db.vector_store import VectorStore
+from db.dependencies import get_vector_store_ctx
 from utils.embedder import embed_chunks
 
 logger = logging.getLogger(__name__)
 
 _store: VectorStore | None = None
 
+
 def init_vector_store() -> VectorStore:
-    """Initialize the shared VectorStore singleton."""
+    """Initialize the shared VectorStore singleton (legacy, kept for backward compat)."""
     global _store
     if _store is None:
         _store = VectorStore(path=os.getenv("LANCEDB_PATH", "./data/lancedb"))
     return _store
 
+
 def get_vector_store() -> VectorStore:
-    """Get the shared VectorStore singleton."""
+    """Get the VectorStore: prefers context var, falls back to singleton."""
+    ctx_store = get_vector_store_ctx()
+    if ctx_store is not None:
+        return ctx_store
     if _store is None:
-        raise RuntimeError("VectorStore not initialized. Call init_vector_store() first.")
+        raise RuntimeError(
+            "VectorStore not initialized. Call init_vector_store() first or set the context variable."
+        )
     return _store
+
 
 def vector_search(query: str, top_k: int = 5) -> str:
     """Searches the vector database for semantically similar chunks."""

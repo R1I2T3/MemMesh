@@ -6,7 +6,7 @@ def test_returns_one_vector_per_chunk():
     mock_chunks = [{"chunk_index": 0, "text": "chunk one", "source": "test.txt"},
                    {"chunk_index": 1, "text": "chunk two", "source": "test.txt"}]
 
-    with patch("utils.embedder._get_client") as mock_get_client:
+    with patch("utils.embedder.get_embedder_client") as mock_get_client:
         mock_client_instance = MagicMock()
         mock_response = MagicMock()
         # Mock embeddings
@@ -26,7 +26,7 @@ def test_returns_one_vector_per_chunk():
 
 @pytest.mark.unit
 def test_each_vector_has_correct_dimension():
-    with patch("utils.embedder._get_client") as mock_get_client:
+    with patch("utils.embedder.get_embedder_client") as mock_get_client:
         mock_client_instance = MagicMock()
         mock_response = MagicMock()
         emb1 = MagicMock(); emb1.values = [0.1] * 768
@@ -45,7 +45,7 @@ def test_empty_input_returns_empty_list():
 
 @pytest.mark.unit
 def test_api_failure_raises_runtime_error():
-    with patch("utils.embedder._get_client") as mock_get_client:
+    with patch("utils.embedder.get_embedder_client") as mock_get_client:
         mock_client_instance = MagicMock()
         mock_client_instance.models.embed_content.side_effect = Exception("API down")
         mock_get_client.return_value = mock_client_instance
@@ -55,7 +55,7 @@ def test_api_failure_raises_runtime_error():
             embed_chunks([{"text": "some text"}])
 
 @pytest.mark.unit
-def test_client_is_singleton():
+def test_client_is_reused():
     import utils.embedder as embedder_module
     # Reset singleton
     embedder_module._client = None
@@ -64,8 +64,8 @@ def test_client_is_singleton():
         mock_instance = MagicMock()
         MockClient.return_value = mock_instance
 
-        client1 = embedder_module._get_client()
-        client2 = embedder_module._get_client()
+        client1 = embedder_module.get_embedder_client()
+        client2 = embedder_module.get_embedder_client()
 
         assert client1 is client2
         MockClient.assert_called_once()

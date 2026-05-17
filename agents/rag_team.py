@@ -7,8 +7,8 @@ from tools.graph_tool import graph_search
 def build_rag_team() -> Agent:
     """
     Constructs an enterprise Graph-RAG Swarm Team.
-    For simplicity in this architecture, we use a single Agent
-    equipped with both Vector and Graph tools, acting as a master RAG router.
+    Uses context-aware tools that resolve stores from contextvars or singletons.
+    For DI-based usage, prefer build_rag_team_with_stores() from db.dependencies.
     """
 
     agent = Agent(

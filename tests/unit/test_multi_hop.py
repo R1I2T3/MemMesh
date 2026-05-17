@@ -108,3 +108,19 @@ def test_multi_hop_deduplicates_results(mock_graph_store, mock_llm):
         unique_keys.add(key)
 
     assert len(unique_keys) == 1
+
+
+@pytest.mark.unit
+def test_multi_hop_results_format_as_context_string():
+    """MultiHopResult results can be formatted into a context string for the agent."""
+    results = [
+        CitationResult(id="g1", type="graph", content="Alice -[WORKS_AT]-> Acme (ORG)", entity_name="Alice", relationship="WORKS_AT", connected_entities=["Acme"]),
+        CitationResult(id="g2", type="graph", content="Acme -[LOCATED_IN]-> NYC (CITY)", entity_name="Acme", relationship="LOCATED_IN", connected_entities=["NYC"]),
+    ]
+    context_lines = [f"[{r.id}] {r.content}" for r in results]
+    context = "\n".join(context_lines)
+
+    assert "[g1]" in context
+    assert "[g2]" in context
+    assert "Alice" in context
+    assert "NYC" in context

@@ -42,6 +42,10 @@ async def lifespan(app: FastAPI):
     vector_store = VectorStore(path=os.getenv("LANCEDB_PATH", "./data/lancedb"))
     session_store = SessionStore()
 
+    # Cleanup expired session messages
+    ttl_days = int(os.getenv("SESSION_TTL_DAYS", "30"))
+    session_store.cleanup_expired(days=ttl_days)
+
     app.state.graph_store = graph_store
     app.state.vector_store = vector_store
     app.state.session_store = session_store

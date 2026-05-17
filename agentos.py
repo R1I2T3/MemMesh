@@ -78,12 +78,17 @@ def health():
     return {"status": "ok", "service": "Graph-RAG AgentOS"}
 
 
+def get_session_store(request: Request) -> SessionStore:
+    return request.app.state.session_store
+
+
 @app.post("/query")
 async def query(
     req: QueryRequest,
     user: dict = Depends(require_auth),
     graph_store: GraphStore = Depends(get_graph_store),
     vector_store: VectorStore = Depends(get_vector_store),
+    session_store: SessionStore = Depends(get_session_store),
 ):
     """
     Streaming endpoint to interact with the Graph-RAG Agent.
@@ -97,16 +102,34 @@ async def query(
         with log_step(ctx, "multi_hop_pre_retrieval"):
             rag_team = build_rag_team_with_stores(graph_store, vector_store)
 
+        history = []
+        if req.session_id and user.get("team_id"):
+            limit = int(os.getenv("SESSION_HISTORY_LIMIT", "10"))
+            messages = session_store.get_session_history(req.session_id, user["team_id"], limit=limit)
+            history = [{"role": m["role"], "content": m["content"]} for m in messages]
+
         async def stream():
             with log_step(ctx, "agent_synthesis"):
+                full_response = []
                 async for event in rag_team.arun(
                     req.message,
                     stream=True,
                     session_id=req.session_id,
+                    history=history if history else None,
                 ):
+                    full_response.append(event)
                     yield json.dumps(asdict(event)) + "\n"
 
-            # Emit citations as final NDJSON event
+                if req.session_id and user.get("team_id"):
+                    session_store.save_message(req.session_id, user["id"], user.get("team_id"), "user", req.message)
+                    response_text = "".join(
+                        [e.content for e in full_response if hasattr(e, "content") and e.content]
+                    )
+                    if response_text:
+                        session_store.save_message(
+                            req.session_id, user["id"], user.get("team_id"), "assistant", response_text
+                        )
+
             citations = get_citations_ctx()
             seen_ids = set()
             deduped = []

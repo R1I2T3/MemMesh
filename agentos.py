@@ -19,12 +19,18 @@ from db.dependencies import (
     build_rag_team_with_stores,
     set_graph_store_ctx,
     set_vector_store_ctx,
+    set_citations_ctx,
+    get_citations_ctx,
 )
 from workers.celery_app import celery_app
+from utils.observability import start_request, log_step, end_request, _configure_json_logging
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Configure JSON structured logging
+    _configure_json_logging()
+
     # Startup: create shared connection-pooled stores
     graph_store = GraphStore(
         uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
@@ -78,17 +84,44 @@ async def query(
     Streaming endpoint to interact with the Graph-RAG Agent.
     Emits NDJSON events as the agent processes the request.
     """
-    rag_team = build_rag_team_with_stores(graph_store, vector_store)
+    ctx = start_request("POST", "/query")
+    set_citations_ctx([])
 
-    async def stream():
-        async for event in rag_team.arun(
-            req.message,
-            stream=True,
-            session_id=req.session_id,
-        ):
-            yield json.dumps(asdict(event)) + "\n"
+    try:
+        with log_step(ctx, "multi_hop_pre_retrieval"):
+            rag_team = build_rag_team_with_stores(graph_store, vector_store)
 
-    return StreamingResponse(stream(), media_type="application/x-ndjson")
+        async def stream():
+            with log_step(ctx, "agent_synthesis"):
+                async for event in rag_team.arun(
+                    req.message,
+                    stream=True,
+                    session_id=req.session_id,
+                ):
+                    yield json.dumps(asdict(event)) + "\n"
+
+            # Emit citations as final NDJSON event
+            citations = get_citations_ctx()
+            seen_ids = set()
+            deduped = []
+            for c in citations:
+                if c.id not in seen_ids:
+                    seen_ids.add(c.id)
+                    deduped.append(c)
+
+            if deduped:
+                citation_event = {
+                    "event": "citations",
+                    "content": [c.to_dict() for c in deduped],
+                }
+                yield json.dumps(citation_event) + "\n"
+
+            end_request(ctx, "ok", citation_count=len(deduped))
+
+        return StreamingResponse(stream(), media_type="application/x-ndjson")
+    except Exception as e:
+        end_request(ctx, "error", error=str(e))
+        raise
 
 
 @app.get("/memory/search")

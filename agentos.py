@@ -201,6 +201,7 @@ def new_session():
 async def ingest(
     file: UploadFile = File(...),
     multimodal: bool = Query(False),
+    user: dict = Depends(require_auth),
 ):
     """
     Accepts a document file, stages it, and queues async ingestion via Celery.
@@ -246,7 +247,7 @@ async def ingest(
 
 
 @app.get("/ingest/{task_id}")
-def ingest_status(task_id: str):
+def ingest_status(task_id: str, user: dict = Depends(require_auth)):
     """
     Polls the Celery result backend for the status of an ingestion task.
     """

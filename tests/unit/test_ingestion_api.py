@@ -3,6 +3,7 @@ import sys
 import pytest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
+from contextlib import asynccontextmanager
 
 
 def _make_mock_module(name, **attrs):
@@ -13,9 +14,29 @@ def _make_mock_module(name, **attrs):
     return mod
 
 
+def _make_require_auth_bypass():
+    """Return a require_auth replacement that returns a fake authenticated user."""
+    from fastapi import Header
+    def bypass(authorization: str = Header(None)) -> dict:
+        return {"id": "test-user", "team_id": "test-team", "is_admin": True}
+    return bypass
+
+
+def _make_require_auth_fail():
+    """Return a require_auth replacement that always raises 401."""
+    from fastapi import Header, HTTPException
+    def fail(authorization: str = Header(None)) -> dict:
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+    return fail
+
+
+@asynccontextmanager
+async def noop_lifespan(app):
+    yield
+
+
 @pytest.fixture
 def client():
-    # Clear agentos and related modules from sys.modules to force fresh import
     for mod_name in list(sys.modules.keys()):
         if mod_name == "agentos" or mod_name.startswith("agentos."):
             del sys.modules[mod_name]
@@ -29,9 +50,9 @@ def client():
 
     mock_async_result = MagicMock()
 
-    # Mock all db modules in sys.modules to avoid C-extension imports
     mock_db_graph_store = _make_mock_module("db.graph_store", GraphStore=MagicMock(return_value=mock_graph_store))
     mock_db_vector_store = _make_mock_module("db.vector_store", VectorStore=MagicMock(return_value=mock_vector_store))
+    mock_db_session_store = _make_mock_module("db.session_store", SessionStore=MagicMock(return_value=MagicMock()))
     mock_db_deps = _make_mock_module(
         "db.dependencies",
         get_graph_store=MagicMock(return_value=mock_graph_store),
@@ -39,7 +60,11 @@ def client():
         build_rag_team_with_stores=MagicMock(return_value=MagicMock()),
         set_graph_store_ctx=MagicMock(),
         set_vector_store_ctx=MagicMock(),
+        set_citations_ctx=MagicMock(),
+        get_citations_ctx=MagicMock(return_value=[]),
     )
+
+    mock_db_auth_store = _make_mock_module("db.auth_store", AuthStore=MagicMock())
 
     with patch.dict(sys.modules, {
         "celery": MagicMock(),
@@ -49,15 +74,75 @@ def client():
         "db": _make_mock_module("db"),
         "db.graph_store": mock_db_graph_store,
         "db.vector_store": mock_db_vector_store,
+        "db.session_store": mock_db_session_store,
         "db.dependencies": mock_db_deps,
+        "db.auth_store": mock_db_auth_store,
     }):
         import agentos
         agentos.celery_app = mock_celery_app
         agentos.AsyncResult = mock_async_result
+        agentos.app.router.lifespan_context = noop_lifespan
         from agentos import app
+
+        app.dependency_overrides[agentos.require_auth] = _make_require_auth_bypass()
 
         with TestClient(app) as test_client:
             yield test_client, mock_celery_app, mock_async_result
+
+
+@pytest.fixture
+def client_no_auth_ingest():
+    for mod_name in list(sys.modules.keys()):
+        if mod_name == "agentos" or mod_name.startswith("agentos."):
+            del sys.modules[mod_name]
+
+    mock_graph_store = MagicMock()
+    mock_vector_store = MagicMock()
+    mock_send_task_result = MagicMock()
+    mock_send_task_result.id = "test-task-123"
+    mock_celery_app = MagicMock()
+    mock_celery_app.send_task.return_value = mock_send_task_result
+
+    mock_async_result = MagicMock()
+
+    mock_db_graph_store = _make_mock_module("db.graph_store", GraphStore=MagicMock(return_value=mock_graph_store))
+    mock_db_vector_store = _make_mock_module("db.vector_store", VectorStore=MagicMock(return_value=mock_vector_store))
+    mock_db_session_store = _make_mock_module("db.session_store", SessionStore=MagicMock(return_value=MagicMock()))
+    mock_db_deps = _make_mock_module(
+        "db.dependencies",
+        get_graph_store=MagicMock(return_value=mock_graph_store),
+        get_vector_store=MagicMock(return_value=mock_vector_store),
+        build_rag_team_with_stores=MagicMock(return_value=MagicMock()),
+        set_graph_store_ctx=MagicMock(),
+        set_vector_store_ctx=MagicMock(),
+        set_citations_ctx=MagicMock(),
+        get_citations_ctx=MagicMock(return_value=[]),
+    )
+
+    mock_db_auth_store = _make_mock_module("db.auth_store", AuthStore=MagicMock())
+
+    with patch.dict(sys.modules, {
+        "celery": MagicMock(),
+        "celery.result": _make_mock_module("celery.result", AsyncResult=mock_async_result),
+        "workers": _make_mock_module("workers"),
+        "workers.celery_app": _make_mock_module("workers.celery_app", celery_app=mock_celery_app),
+        "db": _make_mock_module("db"),
+        "db.graph_store": mock_db_graph_store,
+        "db.vector_store": mock_db_vector_store,
+        "db.session_store": mock_db_session_store,
+        "db.dependencies": mock_db_deps,
+        "db.auth_store": mock_db_auth_store,
+    }):
+        import agentos
+        agentos.celery_app = mock_celery_app
+        agentos.AsyncResult = mock_async_result
+        agentos.app.router.lifespan_context = noop_lifespan
+        from agentos import app
+
+        app.dependency_overrides[agentos.require_auth] = _make_require_auth_fail()
+
+        with TestClient(app) as test_client:
+            yield test_client
 
 
 @pytest.mark.unit
@@ -191,6 +276,18 @@ def test_ingest_status_running(client):
     assert r.status_code == 200
     data = r.json()
     assert data["status"] == "running"
+
+
+@pytest.mark.unit
+def test_ingest_without_auth_returns_401(client_no_auth_ingest):
+    r = client_no_auth_ingest.post("/ingest", files={"file": ("test.txt", b"content")})
+    assert r.status_code == 401
+
+
+@pytest.mark.unit
+def test_ingest_status_without_auth_returns_401(client_no_auth_ingest):
+    r = client_no_auth_ingest.get("/ingest/some-task-id")
+    assert r.status_code == 401
 
 
 @pytest.mark.unit

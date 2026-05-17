@@ -60,19 +60,32 @@ def client():
     workers_celery_app_mod = MagicMock()
     workers_celery_app_mod.celery_app = mock_celery_app
 
+    mock_user = {
+        "id": "user-1",
+        "email": "a@b.com",
+        "team_id": "team-1",
+        "is_admin": False,
+    }
+
+    def mock_require_auth(authorization: str = None) -> dict:
+        return mock_user
+
     with patch.dict(sys.modules, {
         "celery": celery_mod,
         "celery.result": celery_result_mod,
         "workers": workers_mod,
         "workers.celery_app": workers_celery_app_mod,
     }):
-        with patch("agentos.GraphStore", return_value=mock_graph_store):
-            with patch("agentos.VectorStore", return_value=mock_vector_store):
-                with patch("agentos.build_rag_team_with_stores", return_value=mock_agent):
-                    from agentos import app
+        with patch("auth.middleware.require_auth", mock_require_auth):
+            with patch("agentos.GraphStore", return_value=mock_graph_store):
+                with patch("agentos.VectorStore", return_value=mock_vector_store):
+                    with patch("agentos.build_rag_team_with_stores", return_value=mock_agent):
+                        from agentos import app
 
-                    with TestClient(app) as test_client:
-                        yield test_client
+                        app.state.session_store = MagicMock()
+
+                        with TestClient(app) as test_client:
+                            yield test_client
 
 
 @pytest.mark.unit

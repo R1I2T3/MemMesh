@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import json
 import logging
@@ -120,6 +121,15 @@ class VectorStore:
     def search_by_id(self, record_id: str) -> List[Dict[str, Any]]:
         """Retrieves a specific chunk record directly by ID mapping."""
         if self.table.count_rows() == 0:
+            return []
+
+        # Validate record_id is a proper UUID to prevent injection
+        if not re.match(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+            record_id,
+            re.IGNORECASE,
+        ):
+            logger.warning(f"Invalid record_id format: {record_id}")
             return []
 
         results = self.table.search().where(f"id = '{record_id}'").to_list()

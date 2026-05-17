@@ -14,7 +14,7 @@ def test_table_is_created_on_init(store):
 @pytest.mark.unit
 def test_insert_and_retrieve_by_id(store):
     record = {
-        "id": "abc123",
+        "id": "550e8400-e29b-41d4-a716-446655440001",
         "text": "Enterprise LanceDB integration active.",
         "embedding": [0.1] * 768,
         "source": "arch.pdf",
@@ -22,8 +22,8 @@ def test_insert_and_retrieve_by_id(store):
         "custom_relational_tag": "Node A"
     }
     store.insert([record])
-    results = store.search_by_id("abc123")
-    
+    results = store.search_by_id("550e8400-e29b-41d4-a716-446655440001")
+
     assert len(results) == 1
     assert results[0]["text"] == "Enterprise LanceDB integration active."
     assert "metadata" in results[0]
@@ -57,3 +57,24 @@ def test_schema_rejects_missing_embedding(store):
     bad_record = {"id": "bad", "text": "Missing embedding vector"}
     with pytest.raises(Exception):
         store.insert([bad_record])
+
+@pytest.mark.unit
+def test_search_by_id_rejects_invalid_uuid(store):
+    """Non-UUID record_id should be rejected to prevent injection."""
+    results = store.search_by_id("'; DROP TABLE memory_chunks; --")
+    assert results == []
+
+@pytest.mark.unit
+def test_search_by_id_accepts_valid_uuid(store):
+    """Valid UUID should be accepted."""
+    record = {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "text": "Valid UUID test.",
+        "embedding": [0.1] * 768,
+        "source": "test.pdf",
+        "chunk_index": 0,
+    }
+    store.insert([record])
+    results = store.search_by_id("550e8400-e29b-41d4-a716-446655440000")
+    assert len(results) == 1
+    assert results[0]["text"] == "Valid UUID test."

@@ -38,20 +38,41 @@ async def mock_arun_stream(*args, **kwargs):
     yield MockStreamEvent()
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def client():
+    import sys
+    mods_to_remove = [m for m in sys.modules if m == "agentos" or m.startswith("agentos.")]
+    for mod in mods_to_remove:
+        del sys.modules[mod]
+
     mock_graph_store = MagicMock()
     mock_vector_store = MagicMock()
     mock_agent = MagicMock()
     mock_agent.arun = mock_arun_stream
 
-    with patch("agentos.GraphStore", return_value=mock_graph_store):
-        with patch("agentos.VectorStore", return_value=mock_vector_store):
-            with patch("agentos.build_rag_team_with_stores", return_value=mock_agent):
-                from agentos import app
+    mock_celery_app = MagicMock()
+    mock_async_result = MagicMock()
 
-                with TestClient(app) as test_client:
-                    yield test_client
+    celery_mod = MagicMock()
+    celery_result_mod = MagicMock()
+    celery_result_mod.AsyncResult = mock_async_result
+    workers_mod = MagicMock()
+    workers_celery_app_mod = MagicMock()
+    workers_celery_app_mod.celery_app = mock_celery_app
+
+    with patch.dict(sys.modules, {
+        "celery": celery_mod,
+        "celery.result": celery_result_mod,
+        "workers": workers_mod,
+        "workers.celery_app": workers_celery_app_mod,
+    }):
+        with patch("agentos.GraphStore", return_value=mock_graph_store):
+            with patch("agentos.VectorStore", return_value=mock_vector_store):
+                with patch("agentos.build_rag_team_with_stores", return_value=mock_agent):
+                    from agentos import app
+
+                    with TestClient(app) as test_client:
+                        yield test_client
 
 
 @pytest.mark.unit

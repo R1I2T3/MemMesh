@@ -5,8 +5,8 @@ services:
     image: neo4j:latest
     container_name: memmesh-neo4j
     ports:
-      - "7474:7474" # HTTP GUI
-      - "7687:7687" # Bolt interface
+      - "7474:7474"
+      - "7687:7687"
     volumes:
       - ./data/neo4j/data:/data
       - ./data/neo4j/logs:/logs
@@ -16,12 +16,6 @@ services:
       - .env
     environment:
       - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password}
-
-      # Optional: Uncomment below to enable the APOC plugin if you need advanced graph algorithms
-      # - NEO4J_apoc_export_file_enabled=true
-      # - NEO4J_apoc_import_file_enabled=true
-      # - NEO4J_apoc_import_file_use__neo4j__config=true
-      # - NEO4J_PLUGINS=["apoc"]
     restart: unless-stopped
 
   minio:
@@ -38,4 +32,34 @@ services:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-admin}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-password}
     command: server /data --console-address ":9001"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: memmesh-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  worker:
+    build: .
+    container_name: memmesh-worker
+    command: celery -A workers.celery_app worker --loglevel=info
+    depends_on:
+      - neo4j
+      - minio
+      - redis
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    working_dir: /app
     restart: unless-stopped

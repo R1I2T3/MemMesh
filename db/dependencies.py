@@ -7,6 +7,8 @@ from fastapi import Depends, Request
 from db.graph_store import GraphStore
 from db.vector_store import VectorStore
 from utils.embedder import get_embedder_client
+from agents.router.query_rewriter import QueryRewriter
+from utils.embedder import embed_chunks
 
 # Context variables for per-request store access (works with agno tools)
 _graph_store_ctx: ContextVar[GraphStore | None] = ContextVar("graph_store", default=None)
@@ -45,6 +47,47 @@ async def get_embedder():
     """FastAPI dependency that yields a shared Google GenAI embedder client."""
     client = get_embedder_client()
     return client
+
+
+def vector_search_with_rewriting(query: str, vector_store, top_k: int = 5) -> list | str:
+    """
+    Enhanced vector search with query rewriting for improved recall.
+    Rewrites the query into step-back + alternatives, searches all variants,
+    deduplicates by id, and returns the combined list of results.
+    Returns an error string on failure.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        rewriter = QueryRewriter()
+        rewrite_result = rewriter.rewrite(query)
+
+        all_queries = [query, rewrite_result.step_back_query] + rewrite_result.alternative_queries
+
+        seen_ids = set()
+        combined_results = []
+        any_embedded = False
+
+        for q in all_queries:
+            embedded = embed_chunks([{"text": q}])
+            if not embedded or "embedding" not in embedded[0]:
+                continue
+
+            any_embedded = True
+            results = vector_store.search(query_vector=embedded[0]["embedding"], top_k=top_k)
+            for r in results:
+                rid = r.get("id")
+                if rid and rid not in seen_ids:
+                    seen_ids.add(rid)
+                    combined_results.append(r)
+
+        if not any_embedded:
+            return "Vector search failed: Could not generate embedding."
+
+        return combined_results
+    except Exception as e:
+        logger.error(f"Vector search with rewriting failed: {e}")
+        return f"Vector search failed: {str(e)}"
 
 
 def build_rag_team_with_stores(graph_store: GraphStore, vector_store: VectorStore):

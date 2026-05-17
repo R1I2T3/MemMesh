@@ -1,5 +1,6 @@
 import datetime
 import logging
+from agents.extractor_agent import ExtractorAgent
 
 logger = logging.getLogger(__name__)
 
@@ -15,18 +16,20 @@ class MemoryManager:
         """
         Entity Resolution / Graph Deduplication:
         Finds nodes with similar labels/names and merges their relationships.
+        Uses APOC's mergeNodes to combine duplicates and preserve all relationships.
         """
         logger.info("Starting Entity Resolution/Deduplication job...")
-        # Pseudo-code for Neo4j Entity Resolution
         merge_query = """
-        // Cypher query to find and merge duplicate nodes based on string similarity or vector embeddings
         MATCH (a:Entity), (b:Entity)
-        WHERE a.name <> b.name AND a.name CONTAINS b.name
+        WHERE a.name <> b.name AND (
+            toLower(a.name) CONTAINS toLower(b.name)
+            OR toLower(b.name) CONTAINS toLower(a.name)
+        )
         WITH a, b LIMIT 100
-        CALL apoc.refactor.mergeNodes([a,b]) YIELD node
+        CALL apoc.refactor.mergeNodes([a, b], {properties: "discard", mergeRels: true}) YIELD node
         RETURN node
         """
-        # self.graph.run(merge_query)
+        self.graph.run_query(merge_query)
         logger.info("Entity resolution completed.")
 
     def apply_memory_decay(self, decay_days=30):
@@ -37,17 +40,20 @@ class MemoryManager:
         """
         logger.info(f"Applying memory decay for memories older than {decay_days} days...")
         cutoff_date = datetime.datetime.now() - datetime.timedelta(days=decay_days)
+        cutoff_iso = cutoff_date.isoformat()
 
-        # 1. Decay Vector Store (LanceDB)
-        # self.vector.delete_where(f"last_accessed < '{cutoff_date.isoformat()}' AND importance_score < 0.3")
+        # 1. Decay Vector Store (LanceDB) — delete low-importance stale records
+        self.vector.table.delete(
+            f"last_accessed < '{cutoff_iso}' AND importance_score < 0.3"
+        )
 
-        # 2. Decay Graph Store (Neo4j)
+        # 2. Decay Graph Store (Neo4j) — detach delete stale low-importance memories
         decay_query = """
         MATCH (m:Memory)
         WHERE m.last_accessed < $cutoff_date AND m.importance_score < 0.3
         DETACH DELETE m
         """
-        # self.graph.run(decay_query, {"cutoff_date": cutoff_date.isoformat()})
+        self.graph.run_query(decay_query, {"cutoff_date": cutoff_iso})
         logger.info("Memory decay applied.")
 
     def consolidate_session_memories(self, session_id):
@@ -57,8 +63,31 @@ class MemoryManager:
         updates stores, and deletes the verbose raw logs.
         """
         logger.info(f"Consolidating memory for session {session_id}...")
-        # 1. Fetch raw logs for session
-        # 2. Pass to Extractor Agent to summarize into key semantic facts
-        # 3. Insert facts into Graph/Vector store
-        # 4. Prune raw logs
-        pass
+
+        # 1. Fetch raw logs for session from vector store
+        raw_logs = self.vector.table.search().where(
+            f"session_id = '{session_id}' AND role = 'raw'"
+        ).to_list()
+
+        if not raw_logs:
+            logger.info(f"No raw logs found for session {session_id}.")
+            return
+
+        # 2. Concatenate raw text for summarization
+        session_text = "\n".join(record.get("text", "") for record in raw_logs)
+
+        # 3. Use extractor agent to summarize into key semantic facts
+        extractor = ExtractorAgent()
+        triples = extractor.extract(session_text)
+
+        # 4. Insert extracted facts into Graph store
+        if triples:
+            self.graph.upsert_triples(triples, context_id=session_id)
+
+        # 5. Mark raw logs as consolidated (update metadata)
+        raw_ids = [record.get("id") for record in raw_logs if record.get("id")]
+        if raw_ids:
+            id_list = ", ".join(f"'{rid}'" for rid in raw_ids)
+            self.vector.table.delete(f"id IN ({id_list})")
+
+        logger.info(f"Session {session_id} consolidation completed. Extracted {len(triples)} facts.")

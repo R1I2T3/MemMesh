@@ -1,22 +1,37 @@
 from unittest.mock import patch, MagicMock
 import pytest
+import sys
+
+
+def _make_task_decorator():
+    """Create a mock Celery task decorator that returns the function unchanged."""
+    def task_decorator(*args, **kwargs):
+        def wrapper(fn):
+            return fn
+        if args and callable(args[0]):
+            return args[0]
+        return wrapper
+    return task_decorator
 
 
 @pytest.fixture
-def mock_stores():
-    """Patch store initialization so tests don't require live Neo4j/LanceDB."""
-    with patch("tools.graph_tool.init_graph_store", return_value=MagicMock()) as mock_gs:
-        with patch("tools.vector_tool.init_vector_store", return_value=MagicMock()) as mock_vs:
-            yield mock_gs, mock_vs
+def mock_celery():
+    """Mock celery module to avoid import errors."""
+    mock_celery = MagicMock()
+    mock_celery.Celery.return_value.task = _make_task_decorator()
+    with patch.dict(sys.modules, {"celery": mock_celery}):
+        yield mock_celery
 
 
 @pytest.fixture
-def tasks_module(mock_stores):
-    """Import workers.tasks after stores are patched."""
-    with patch("workers.tasks.memory_manager") as mock_mm:
-        from workers import tasks
-        tasks.memory_manager = mock_mm
-        yield tasks
+def tasks_module(mock_celery):
+    """Import workers.tasks after celery is patched, then replace memory_manager."""
+    with patch("db.lifecycle.memory_manager.ExtractorAgent"):
+        with patch("tools.graph_tool.init_graph_store", return_value=MagicMock()):
+            with patch("tools.vector_tool.init_vector_store", return_value=MagicMock()):
+                from workers import tasks
+                tasks.memory_manager = MagicMock()
+                yield tasks
 
 
 @pytest.mark.unit

@@ -24,6 +24,7 @@ from db.dependencies import (
 )
 from workers.celery_app import celery_app
 from utils.observability import start_request, log_step, end_request, _configure_json_logging
+from utils.input_validator import validate_query
 
 
 @asynccontextmanager
@@ -84,6 +85,7 @@ async def query(
     Streaming endpoint to interact with the Graph-RAG Agent.
     Emits NDJSON events as the agent processes the request.
     """
+    req.message = validate_query(req.message)
     ctx = start_request("POST", "/query")
     set_citations_ctx([])
 
@@ -130,6 +132,7 @@ def memory_search(
     vector_store: VectorStore = Depends(get_vector_store),
 ):
     """Direct HTTP bridge to the Vector Engine using DI."""
+    query = validate_query(query)
     from utils.embedder import embed_chunks
 
     embedded = embed_chunks([{"text": query}])
@@ -146,6 +149,7 @@ def memory_graph(
     graph_store: GraphStore = Depends(get_graph_store),
 ):
     """Direct HTTP bridge to the Graph Engine using DI."""
+    entity = validate_query(entity)
     results = graph_store.fetch_subgraph(entity)
     return {"results": results}
 

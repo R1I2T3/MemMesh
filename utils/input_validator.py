@@ -16,13 +16,11 @@ INJECTION_PATTERNS = [
     r"output\s+your\s+prompt",
     r"repeat\s+the\s+instructions",
     r"show\s+your\s+system",
-    r"##",
-    r"---",
 ]
 
 PII_PATTERNS = [
     r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
-    r"(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}",
+    r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b",
     r"\b\d{3}-\d{2}-\d{4}\b",
     r"\b(?:\d{4}[-\s]?){3}\d{1,4}\b",
     r"\b\d{13,19}\b",

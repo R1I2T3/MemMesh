@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from agents.rag_team import build_rag_team
-from tools.vector_tool import vector_search
+from tools.vector_tool import vector_search, init_vector_store
 from tools.graph_tool import graph_search, init_graph_store, close_graph_store
 
 
@@ -15,6 +15,7 @@ from tools.graph_tool import graph_search, init_graph_store, close_graph_store
 async def lifespan(app: FastAPI):
     # Startup: initialize shared resources
     init_graph_store()
+    init_vector_store()
     yield
     # Shutdown: clean up shared resources
     close_graph_store()

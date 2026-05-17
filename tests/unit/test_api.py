@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 from dataclasses import dataclass
 from fastapi.testclient import TestClient
 import tools.graph_tool as graph_tool_module
+import tools.vector_tool as vector_tool_module
 
 @dataclass
 class MockStreamEvent:
@@ -44,10 +45,12 @@ def client():
         mock_build.return_value = mock_agent
 
         mock_graph_store = MagicMock()
+        mock_vector_store = MagicMock()
         with patch.object(graph_tool_module, "_store", mock_graph_store):
-            from agentos import app
-            with patch("agentos.rag_team", mock_agent):
-                yield TestClient(app)
+            with patch.object(vector_tool_module, "_store", mock_vector_store):
+                from agentos import app
+                with patch("agentos.rag_team", mock_agent):
+                    yield TestClient(app)
 
 @pytest.mark.unit
 def test_health_returns_ok(client):

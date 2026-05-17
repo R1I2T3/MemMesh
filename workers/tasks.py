@@ -1,13 +1,15 @@
 from workers.celery_app import celery_app
 from db.lifecycle.memory_manager import MemoryManager
+from tools.graph_tool import init_graph_store
+from tools.vector_tool import init_vector_store
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Mock injection of DB stores since this is running in background worker context
-mock_graph_store = None
-mock_vector_store = None
-memory_manager = MemoryManager(mock_graph_store, mock_vector_store)
+# Initialize shared stores once when the Celery worker starts
+graph_store = init_graph_store()
+vector_store = init_vector_store()
+memory_manager = MemoryManager(graph_store, vector_store)
 
 @celery_app.task(bind=True, max_retries=3)
 def process_document_ingestion(self, document_path: str, multimodal: bool = False):

@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from dataclasses import dataclass
 from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
 
 @dataclass
@@ -61,83 +62,70 @@ def client():
     workers_celery_app_mod = MagicMock()
     workers_celery_app_mod.celery_app = mock_celery_app
 
+    mock_user = {
+        "id": "user-1",
+        "email": "a@b.com",
+        "team_id": "team-1",
+        "is_admin": False,
+    }
+
+    def mock_require_auth(authorization: str = None) -> dict:
+        return mock_user
+
     with patch.dict(sys.modules, {
         "celery": celery_mod,
         "celery.result": celery_result_mod,
         "workers": workers_mod,
         "workers.celery_app": workers_celery_app_mod,
     }):
-        import agentos
-        agentos.celery_app = mock_celery_app
-        agentos.AsyncResult = mock_async_result
+        with patch("auth.middleware.require_auth", mock_require_auth):
+            with patch("agentos.GraphStore", return_value=mock_graph_store):
+                with patch("agentos.VectorStore", return_value=mock_vector_store):
+                    with patch("agentos.build_rag_team_with_stores", return_value=mock_agent):
+                        from agentos import app
+                        with TestClient(app) as test_client:
+                            yield test_client
 
-        original_lifespan = agentos.lifespan
 
-        async def mock_lifespan(app):
-            app.state.graph_store = mock_graph_store
-            app.state.vector_store = mock_vector_store
-            from db.dependencies import set_graph_store_ctx, set_vector_store_ctx
-            set_graph_store_ctx(mock_graph_store)
-            set_vector_store_ctx(mock_vector_store)
-            yield
+@pytest.fixture(scope="module")
+def client_no_auth():
+    """Test client without auth for testing 401 responses."""
+    import sys
+    mods_to_remove = [m for m in sys.modules if m == "agentos" or m.startswith("agentos.")]
+    for mod in mods_to_remove:
+        del sys.modules[mod]
 
-        agentos.app = agentos.FastAPI(title="Graph-RAG AgentOS", version="1.0.0", lifespan=mock_lifespan)
-        agentos.app.add_middleware(
-            agentos.CORSMiddleware,
-            allow_origins=["*"],
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+    mock_graph_store = MagicMock()
+    mock_vector_store = MagicMock()
+    mock_agent = MagicMock()
+    mock_agent.arun = mock_arun_stream
 
-        @agentos.app.get("/health")
-        def health():
-            return {"status": "ok", "service": "Graph-RAG AgentOS"}
+    mock_celery_app = MagicMock()
+    mock_async_result = MagicMock()
 
-        @agentos.app.post("/query")
-        async def query_endpoint(
-            req: agentos.QueryRequest,
-        ):
-            ctx = agentos.start_request("POST", "/query")
-            agentos.set_citations_ctx([])
+    celery_mod = MagicMock()
+    celery_result_mod = MagicMock()
+    celery_result_mod.AsyncResult = mock_async_result
+    workers_mod = MagicMock()
+    workers_celery_app_mod = MagicMock()
+    workers_celery_app_mod.celery_app = mock_celery_app
 
-            try:
-                with agentos.log_step(ctx, "multi_hop_pre_retrieval"):
-                    rag_team = mock_agent
+    def fail_require_auth(authorization: str = None) -> dict:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
-                async def stream():
-                    with agentos.log_step(ctx, "agent_synthesis"):
-                        async for event in rag_team.arun(
-                            req.message,
-                            stream=True,
-                            session_id=req.session_id,
-                        ):
-                            yield json.dumps(agentos.asdict(event)) + "\n"
-
-                    citations = agentos.get_citations_ctx()
-                    seen_ids = set()
-                    deduped = []
-                    for c in citations:
-                        if c.id not in seen_ids:
-                            seen_ids.add(c.id)
-                            deduped.append(c)
-
-                    if deduped:
-                        citation_event = {
-                            "event": "citations",
-                            "content": [c.to_dict() for c in deduped],
-                        }
-                        yield json.dumps(citation_event) + "\n"
-
-                    agentos.end_request(ctx, "ok", citation_count=len(deduped))
-
-                return agentos.StreamingResponse(stream(), media_type="application/x-ndjson")
-            except Exception as e:
-                agentos.end_request(ctx, "error", error=str(e))
-                raise
-
-        from agentos import app
-        with TestClient(app) as test_client:
-            yield test_client
+    with patch.dict(sys.modules, {
+        "celery": celery_mod,
+        "celery.result": celery_result_mod,
+        "workers": workers_mod,
+        "workers.celery_app": workers_celery_app_mod,
+    }):
+        with patch("auth.middleware.require_auth", fail_require_auth):
+            with patch("agentos.GraphStore", return_value=mock_graph_store):
+                with patch("agentos.VectorStore", return_value=mock_vector_store):
+                    with patch("agentos.build_rag_team_with_stores", return_value=mock_agent):
+                        from agentos import app
+                        with TestClient(app) as test_client:
+                            yield test_client
 
 
 @pytest.mark.unit
@@ -158,3 +146,27 @@ def test_health_endpoint_still_works(client):
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
+
+
+@pytest.mark.unit
+def test_query_without_auth_returns_401(client_no_auth):
+    r = client_no_auth.post("/query", json={"message": "hello"})
+    assert r.status_code == 401
+
+
+@pytest.mark.unit
+def test_memory_search_without_auth_returns_401(client_no_auth):
+    r = client_no_auth.get("/memory/search", params={"query": "test"})
+    assert r.status_code == 401
+
+
+@pytest.mark.unit
+def test_memory_graph_without_auth_returns_401(client_no_auth):
+    r = client_no_auth.get("/memory/graph", params={"entity": "test"})
+    assert r.status_code == 401
+
+
+@pytest.mark.unit
+def test_health_without_auth_returns_200(client_no_auth):
+    r = client_no_auth.get("/health")
+    assert r.status_code == 200

@@ -6,7 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from celery.result import AsyncResult
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -22,36 +22,37 @@ from db.dependencies import (
     set_citations_ctx,
     get_citations_ctx,
 )
+from db.session_store import SessionStore
 from workers.celery_app import celery_app
 from utils.observability import start_request, log_step, end_request, _configure_json_logging
 from utils.input_validator import validate_query
+from auth.middleware import require_auth
+from auth.routes import router as auth_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Configure JSON structured logging
     _configure_json_logging()
 
-    # Startup: create shared connection-pooled stores
     graph_store = GraphStore(
         uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
         user=os.getenv("NEO4J_USER", "neo4j"),
         password=os.getenv("NEO4J_PASSWORD", "password"),
     )
     vector_store = VectorStore(path=os.getenv("LANCEDB_PATH", "./data/lancedb"))
+    session_store = SessionStore()
 
-    # Store in app.state for DI access
     app.state.graph_store = graph_store
     app.state.vector_store = vector_store
+    app.state.session_store = session_store
 
-    # Set contextvars so legacy tools work during requests
     set_graph_store_ctx(graph_store)
     set_vector_store_ctx(vector_store)
 
     yield
 
-    # Shutdown: close connections
     graph_store.close()
+    session_store.close()
 
 
 app = FastAPI(title="Graph-RAG AgentOS", version="1.0.0", lifespan=lifespan)
@@ -63,6 +64,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router)
 
 
 class QueryRequest(BaseModel):
@@ -78,6 +81,7 @@ def health():
 @app.post("/query")
 async def query(
     req: QueryRequest,
+    user: dict = Depends(require_auth),
     graph_store: GraphStore = Depends(get_graph_store),
     vector_store: VectorStore = Depends(get_vector_store),
 ):
@@ -129,6 +133,7 @@ async def query(
 @app.get("/memory/search")
 def memory_search(
     query: str,
+    user: dict = Depends(require_auth),
     vector_store: VectorStore = Depends(get_vector_store),
 ):
     """Direct HTTP bridge to the Vector Engine using DI."""
@@ -146,6 +151,7 @@ def memory_search(
 @app.get("/memory/graph")
 def memory_graph(
     entity: str,
+    user: dict = Depends(require_auth),
     graph_store: GraphStore = Depends(get_graph_store),
 ):
     """Direct HTTP bridge to the Graph Engine using DI."""

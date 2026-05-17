@@ -1,5 +1,6 @@
 import json
 import uuid
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,9 +8,19 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from agents.rag_team import build_rag_team
 from tools.vector_tool import vector_search
-from tools.graph_tool import graph_search
+from tools.graph_tool import graph_search, init_graph_store, close_graph_store
 
-app = FastAPI(title="Graph-RAG AgentOS", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: initialize shared resources
+    init_graph_store()
+    yield
+    # Shutdown: clean up shared resources
+    close_graph_store()
+
+
+app = FastAPI(title="Graph-RAG AgentOS", version="1.0.0", lifespan=lifespan)
 
 # Enable CORS for frontend integrations
 app.add_middleware(

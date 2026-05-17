@@ -4,27 +4,18 @@ import { APIRoutes } from '@/api/routes'
 
 import useChatActions from '@/hooks/useChatActions'
 import { useStore } from '../store'
-import { RunEvent, RunResponseContent, type RunResponse } from '@/types/os'
-import { constructEndpointUrl } from '@/lib/constructEndpointUrl'
+import { RunEvent, RunResponseContent, type RunResponse, ToolCall } from '@/types/os'
 import useAIResponseStream from './useAIResponseStream'
-import { ToolCall } from '@/types/os'
-import { useQueryState } from 'nuqs'
 import { getJsonMarkdown } from '@/lib/utils'
 
 const useAIChatStreamHandler = () => {
   const setMessages = useStore((state) => state.setMessages)
   const { addMessage, focusChatInput } = useChatActions()
-  const [agentId] = useQueryState('agent')
-  const [teamId] = useQueryState('team')
-  const [sessionId, setSessionId] = useQueryState('session')
+  const sessionId = useStore((state) => state.sessionId)
+  const setSessionId = useStore((state) => state.setSessionId)
   const selectedEndpoint = useStore((state) => state.selectedEndpoint)
-  const authToken = useStore((state) => state.authToken)
-  const mode = useStore((state) => state.mode)
-  const setStreamingErrorMessage = useStore(
-    (state) => state.setStreamingErrorMessage
-  )
+  const setStreamingErrorMessage = useStore((state) => state.setStreamingErrorMessage)
   const setIsStreaming = useStore((state) => state.setIsStreaming)
-  const setSessionsData = useStore((state) => state.setSessionsData)
   const { streamResponse } = useAIResponseStream()
 
   const updateMessagesWithErrorState = useCallback(() => {
@@ -38,12 +29,6 @@ const useAIChatStreamHandler = () => {
     })
   }, [setMessages])
 
-  /**
-   * Processes a new tool call and adds it to the message
-   * @param toolCall - The tool call to add
-   * @param prevToolCalls - The previous tool calls array
-   * @returns Updated tool calls array
-   */
   const processToolCall = useCallback(
     (toolCall: ToolCall, prevToolCalls: ToolCall[] = []) => {
       const toolCallId =
@@ -71,23 +56,15 @@ const useAIChatStreamHandler = () => {
     []
   )
 
-  /**
-   * Processes tool calls from a chunk, handling both single tool object and tools array formats
-   * @param chunk - The chunk containing tool call data
-   * @param existingToolCalls - The existing tool calls array
-   * @returns Updated tool calls array
-   */
   const processChunkToolCalls = useCallback(
     (
       chunk: RunResponseContent | RunResponse,
       existingToolCalls: ToolCall[] = []
     ) => {
       let updatedToolCalls = [...existingToolCalls]
-      // Handle new single tool object format
       if (chunk.tool) {
         updatedToolCalls = processToolCall(chunk.tool, updatedToolCalls)
       }
-      // Handle legacy tools array format
       if (chunk.tools && chunk.tools.length > 0) {
         for (const toolCall of chunk.tools) {
           updatedToolCalls = processToolCall(toolCall, updatedToolCalls)
@@ -100,13 +77,8 @@ const useAIChatStreamHandler = () => {
   )
 
   const handleStreamResponse = useCallback(
-    async (input: string | FormData) => {
+    async (input: string) => {
       setIsStreaming(true)
-
-      const formData = input instanceof FormData ? input : new FormData()
-      if (typeof input === 'string') {
-        formData.append('message', input)
-      }
 
       setMessages((prevMessages) => {
         if (prevMessages.length >= 2) {
@@ -125,7 +97,7 @@ const useAIChatStreamHandler = () => {
 
       addMessage({
         role: 'user',
-        content: formData.get('message') as string,
+        content: input,
         created_at: Math.floor(Date.now() / 1000)
       })
 
@@ -138,74 +110,26 @@ const useAIChatStreamHandler = () => {
       })
 
       let lastContent = ''
-      let newSessionId = sessionId
       try {
-        const endpointUrl = constructEndpointUrl(selectedEndpoint)
+        const queryUrl = APIRoutes.Query(selectedEndpoint)
 
-        let RunUrl: string | null = null
-
-        if (mode === 'team' && teamId) {
-          RunUrl = APIRoutes.TeamRun(endpointUrl, teamId)
-        } else if (mode === 'agent' && agentId) {
-          RunUrl = APIRoutes.AgentRun(endpointUrl).replace(
-            '{agent_id}',
-            agentId
-          )
-        }
-
-        if (!RunUrl) {
-          updateMessagesWithErrorState()
-          setStreamingErrorMessage('Please select an agent or team first.')
-          setIsStreaming(false)
-          return
-        }
-
-        formData.append('stream', 'true')
-        formData.append('session_id', sessionId ?? '')
-
-        // Create headers with auth token if available
-        const headers: Record<string, string> = {}
-        if (authToken) {
-          headers['Authorization'] = `Bearer ${authToken}`
+        const requestBody = {
+          message: input,
+          session_id: sessionId,
         }
 
         await streamResponse({
-          apiUrl: RunUrl,
-          headers,
-          requestBody: formData,
+          apiUrl: queryUrl,
+          headers: {},
+          requestBody,
           onChunk: (chunk: RunResponse) => {
-            if (
-              chunk.event === RunEvent.RunStarted ||
-              chunk.event === RunEvent.TeamRunStarted ||
-              chunk.event === RunEvent.ReasoningStarted ||
-              chunk.event === RunEvent.TeamReasoningStarted
-            ) {
-              newSessionId = chunk.session_id as string
-              setSessionId(chunk.session_id as string)
-              if (
-                (!sessionId || sessionId !== chunk.session_id) &&
-                chunk.session_id
-              ) {
-                const sessionData = {
-                  session_id: chunk.session_id as string,
-                  session_name: formData.get('message') as string,
-                  created_at: chunk.created_at
-                }
-                setSessionsData((prevSessionsData) => {
-                  const sessionExists = prevSessionsData?.some(
-                    (session) => session.session_id === chunk.session_id
-                  )
-                  if (sessionExists) {
-                    return prevSessionsData
-                  }
-                  return [sessionData, ...(prevSessionsData ?? [])]
-                })
+            if (chunk.event === RunEvent.RunStarted) {
+              if (chunk.session_id) {
+                setSessionId(chunk.session_id)
               }
             } else if (
               chunk.event === RunEvent.ToolCallStarted ||
-              chunk.event === RunEvent.TeamToolCallStarted ||
-              chunk.event === RunEvent.ToolCallCompleted ||
-              chunk.event === RunEvent.TeamToolCallCompleted
+              chunk.event === RunEvent.ToolCallCompleted
             ) {
               setMessages((prevMessages) => {
                 const newMessages = [...prevMessages]
@@ -218,10 +142,7 @@ const useAIChatStreamHandler = () => {
                 }
                 return newMessages
               })
-            } else if (
-              chunk.event === RunEvent.RunContent ||
-              chunk.event === RunEvent.TeamRunContent
-            ) {
+            } else if (chunk.event === RunEvent.RunContent) {
               setMessages((prevMessages) => {
                 const newMessages = [...prevMessages]
                 const lastMessage = newMessages[newMessages.length - 1]
@@ -234,7 +155,6 @@ const useAIChatStreamHandler = () => {
                   lastMessage.content += uniqueContent
                   lastContent = chunk.content
 
-                  // Handle tool calls streaming
                   lastMessage.tool_calls = processChunkToolCalls(
                     chunk,
                     lastMessage.tool_calls
@@ -287,10 +207,7 @@ const useAIChatStreamHandler = () => {
                 }
                 return newMessages
               })
-            } else if (
-              chunk.event === RunEvent.ReasoningStep ||
-              chunk.event === RunEvent.TeamReasoningStep
-            ) {
+            } else if (chunk.event === RunEvent.ReasoningStep) {
               setMessages((prevMessages) => {
                 const newMessages = [...prevMessages]
                 const lastMessage = newMessages[newMessages.length - 1]
@@ -305,10 +222,7 @@ const useAIChatStreamHandler = () => {
                 }
                 return newMessages
               })
-            } else if (
-              chunk.event === RunEvent.ReasoningCompleted ||
-              chunk.event === RunEvent.TeamReasoningCompleted
-            ) {
+            } else if (chunk.event === RunEvent.ReasoningCompleted) {
               setMessages((prevMessages) => {
                 const newMessages = [...prevMessages]
                 const lastMessage = newMessages[newMessages.length - 1]
@@ -324,34 +238,15 @@ const useAIChatStreamHandler = () => {
               })
             } else if (
               chunk.event === RunEvent.RunError ||
-              chunk.event === RunEvent.TeamRunError ||
-              chunk.event === RunEvent.TeamRunCancelled
+              chunk.event === RunEvent.RunCancelled
             ) {
               updateMessagesWithErrorState()
               const errorContent =
-                (chunk.content as string) ||
-                (chunk.event === RunEvent.TeamRunCancelled
-                  ? 'Run cancelled'
-                  : 'Error during run')
+                (chunk.content as string) || 'Error during run'
               setStreamingErrorMessage(errorContent)
-              if (newSessionId) {
-                setSessionsData(
-                  (prevSessionsData) =>
-                    prevSessionsData?.filter(
-                      (session) => session.session_id !== newSessionId
-                    ) ?? null
-                )
-              }
-            } else if (
-              chunk.event === RunEvent.UpdatingMemory ||
-              chunk.event === RunEvent.TeamMemoryUpdateStarted ||
-              chunk.event === RunEvent.TeamMemoryUpdateCompleted
-            ) {
-              // No-op for now; could surface a lightweight UI indicator in the future
-            } else if (
-              chunk.event === RunEvent.RunCompleted ||
-              chunk.event === RunEvent.TeamRunCompleted
-            ) {
+            } else if (chunk.event === RunEvent.UpdatingMemory) {
+              // No-op
+            } else if (chunk.event === RunEvent.RunCompleted) {
               setMessages((prevMessages) => {
                 const newMessages = prevMessages.map((message, index) => {
                   if (
@@ -398,14 +293,6 @@ const useAIChatStreamHandler = () => {
           onError: (error) => {
             updateMessagesWithErrorState()
             setStreamingErrorMessage(error.message)
-            if (newSessionId) {
-              setSessionsData(
-                (prevSessionsData) =>
-                  prevSessionsData?.filter(
-                    (session) => session.session_id !== newSessionId
-                  ) ?? null
-              )
-            }
           },
           onComplete: () => {}
         })
@@ -414,14 +301,6 @@ const useAIChatStreamHandler = () => {
         setStreamingErrorMessage(
           error instanceof Error ? error.message : String(error)
         )
-        if (newSessionId) {
-          setSessionsData(
-            (prevSessionsData) =>
-              prevSessionsData?.filter(
-                (session) => session.session_id !== newSessionId
-              ) ?? null
-          )
-        }
       } finally {
         focusChatInput()
         setIsStreaming(false)
@@ -432,18 +311,13 @@ const useAIChatStreamHandler = () => {
       addMessage,
       updateMessagesWithErrorState,
       selectedEndpoint,
-      authToken,
       streamResponse,
-      agentId,
-      teamId,
-      mode,
       setStreamingErrorMessage,
       setIsStreaming,
       focusChatInput,
-      setSessionsData,
       sessionId,
       setSessionId,
-      processChunkToolCalls
+      processChunkToolCalls,
     ]
   )
 

@@ -1,26 +1,20 @@
 'use client'
 import { Button } from '@/components/ui/button'
-import { ModeSelector } from '@/components/chat/Sidebar/ModeSelector'
-import { EntitySelector } from '@/components/chat/Sidebar/EntitySelector'
 import useChatActions from '@/hooks/useChatActions'
 import { useStore } from '@/store'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useEffect } from 'react'
 import Icon from '@/components/ui/icon'
-import { getProviderIcon } from '@/lib/modelProvider'
-import Sessions from './Sessions'
-import AuthToken from './AuthToken'
-import { isValidUrl } from '@/lib/utils'
+import { isValidUrl, truncateText } from '@/lib/utils'
 import { toast } from 'sonner'
-import { useQueryState } from 'nuqs'
-import { truncateText } from '@/lib/utils'
-import { Skeleton } from '@/components/ui/skeleton'
+import useSessionLoader from '@/hooks/useSessionLoader'
 
 const ENDPOINT_PLACEHOLDER = 'NO ENDPOINT ADDED'
+
 const SidebarHeader = () => (
   <div className="flex items-center gap-2">
     <Icon type="agno" size="xs" />
-    <span className="text-xs font-medium uppercase text-white">Agent UI</span>
+    <span className="text-xs font-medium uppercase text-white">MemMesh</span>
   </div>
 )
 
@@ -42,24 +36,13 @@ const NewChatButton = ({
   </Button>
 )
 
-const ModelDisplay = ({ model }: { model: string }) => (
-  <div className="flex h-9 w-full items-center gap-3 rounded-xl border border-primary/15 bg-accent p-3 text-xs font-medium uppercase text-muted">
-    {(() => {
-      const icon = getProviderIcon(model)
-      return icon ? <Icon type={icon} className="shrink-0" size="xs" /> : null
-    })()}
-    {model}
-  </div>
-)
-
 const Endpoint = () => {
   const {
     selectedEndpoint,
-    isEndpointActive,
+    isBackendOnline,
     setSelectedEndpoint,
-    setAgents,
-    setSessionsData,
-    setMessages
+    setMessages,
+    setSessionId,
   } = useStore()
   const { initialize } = useChatActions()
   const [isEditing, setIsEditing] = useState(false)
@@ -67,8 +50,6 @@ const Endpoint = () => {
   const [isMounted, setIsMounted] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
   const [isRotating, setIsRotating] = useState(false)
-  const [, setAgentId] = useQueryState('agent')
-  const [, setSessionId] = useQueryState('session')
 
   useEffect(() => {
     setEndpointValue(selectedEndpoint)
@@ -85,12 +66,9 @@ const Endpoint = () => {
     }
     const cleanEndpoint = endpointValue.replace(/\/$/, '').trim()
     setSelectedEndpoint(cleanEndpoint)
-    setAgentId(null)
     setSessionId(null)
     setIsEditing(false)
     setIsHovering(false)
-    setAgents([])
-    setSessionsData([])
     setMessages([])
   }
 
@@ -116,7 +94,7 @@ const Endpoint = () => {
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <div className="text-xs font-medium uppercase text-primary">AgentOS</div>
+      <div className="text-xs font-medium uppercase text-primary">Backend</div>
       {isEditing ? (
         <div className="flex w-full items-center gap-1">
           <input
@@ -156,7 +134,7 @@ const Endpoint = () => {
                   transition={{ duration: 0.2 }}
                 >
                   <p className="flex items-center gap-2 whitespace-nowrap text-xs font-medium text-primary">
-                    <Icon type="edit" size="xxs" /> EDIT AGENTOS
+                    <Icon type="edit" size="xxs" /> EDIT BACKEND
                   </p>
                 </motion.div>
               ) : (
@@ -175,7 +153,7 @@ const Endpoint = () => {
                       : 'http://localhost:7777'}
                   </p>
                   <div
-                    className={`size-2 shrink-0 rounded-full ${getStatusColor(isEndpointActive)}`}
+                    className={`size-2 shrink-0 rounded-full ${getStatusColor(isBackendOnline)}`}
                   />
                 </motion.div>
               )}
@@ -201,36 +179,27 @@ const Endpoint = () => {
   )
 }
 
-const Sidebar = ({
-  hasEnvToken,
-  envToken
-}: {
-  hasEnvToken?: boolean
-  envToken?: string
-}) => {
+const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const { clearChat, focusChatInput, initialize } = useChatActions()
+  const { createNewSession } = useSessionLoader()
   const {
     messages,
     selectedEndpoint,
-    isEndpointActive,
-    selectedModel,
+    isBackendOnline,
     hydrated,
-    isEndpointLoading,
-    mode
   } = useStore()
   const [isMounted, setIsMounted] = useState(false)
-  const [agentId] = useQueryState('agent')
-  const [teamId] = useQueryState('team')
 
   useEffect(() => {
     setIsMounted(true)
 
     if (hydrated) initialize()
-  }, [selectedEndpoint, initialize, hydrated, mode])
+  }, [selectedEndpoint, initialize, hydrated])
 
-  const handleNewChat = () => {
+  const handleNewChat = async () => {
     clearChat()
+    await createNewSession()
     focusChatInput()
   }
 
@@ -265,46 +234,12 @@ const Sidebar = ({
       >
         <SidebarHeader />
         <NewChatButton
-          disabled={messages.length === 0}
+          disabled={messages.length === 0 && !isBackendOnline}
           onClick={handleNewChat}
         />
         {isMounted && (
           <>
             <Endpoint />
-            <AuthToken hasEnvToken={hasEnvToken} envToken={envToken} />
-            {isEndpointActive && (
-              <>
-                <motion.div
-                  className="flex w-full flex-col items-start gap-2"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.5, ease: 'easeInOut' }}
-                >
-                  <div className="text-xs font-medium uppercase text-primary">
-                    Mode
-                  </div>
-                  {isEndpointLoading ? (
-                    <div className="flex w-full flex-col gap-2">
-                      {Array.from({ length: 3 }).map((_, index) => (
-                        <Skeleton
-                          key={index}
-                          className="h-9 w-full rounded-xl"
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <>
-                      <ModeSelector />
-                      <EntitySelector />
-                      {selectedModel && (agentId || teamId) && (
-                        <ModelDisplay model={selectedModel} />
-                      )}
-                    </>
-                  )}
-                </motion.div>
-                <Sessions />
-              </>
-            )}
           </>
         )}
       </motion.div>

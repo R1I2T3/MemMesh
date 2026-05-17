@@ -3,8 +3,10 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import asdict
+from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from celery.result import AsyncResult
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -18,6 +20,7 @@ from db.dependencies import (
     set_graph_store_ctx,
     set_vector_store_ctx,
 )
+from workers.celery_app import celery_app
 
 
 @asynccontextmanager
@@ -114,7 +117,92 @@ def memory_graph(
     return {"results": results}
 
 
+STAGING_DIR = Path("./data/staging")
+STAGING_DIR.mkdir(parents=True, exist_ok=True)
+
+SUPPORTED_EXTENSIONS = {
+    ".pdf", ".docx", ".pptx", ".xml", ".eml", ".txt", ".md", ".csv", ".xlsx", ".json",
+}
+
+
 @app.post("/session/new")
 def new_session():
     """Generates a novel session ID for conversational state routing."""
     return {"session_id": str(uuid.uuid4())}
+
+
+@app.post("/ingest")
+async def ingest(
+    file: UploadFile = File(...),
+    multimodal: bool = Query(False),
+):
+    """
+    Accepts a document file, stages it, and queues async ingestion via Celery.
+    Returns a task_id for status polling.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ext}'. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
+        )
+
+    try:
+        content = await file.read()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Failed to read file content")
+
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    unique_name = f"{uuid.uuid4()}_{file.filename}"
+    staging_path = STAGING_DIR / unique_name
+
+    try:
+        with open(staging_path, "wb") as f:
+            f.write(content)
+    except OSError:
+        raise HTTPException(status_code=500, detail="Failed to save file to staging")
+
+    try:
+        task = celery_app.send_task(
+            "workers.tasks.process_document_ingestion",
+            args=[str(staging_path), multimodal],
+        )
+    except Exception:
+        staging_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=503, detail="Celery broker unavailable")
+
+    return {"task_id": task.id, "status": "pending"}
+
+
+@app.get("/ingest/{task_id}")
+def ingest_status(task_id: str):
+    """
+    Polls the Celery result backend for the status of an ingestion task.
+    """
+    result = AsyncResult(task_id, app=celery_app)
+
+    state_map = {
+        "PENDING": "pending",
+        "RECEIVED": "pending",
+        "STARTED": "running",
+        "SUCCESS": "completed",
+        "FAILURE": "failed",
+        "RETRY": "running",
+        "REVOKED": "failed",
+    }
+
+    status = state_map.get(result.state, "pending")
+
+    response = {"task_id": task_id, "status": status}
+
+    if result.state == "SUCCESS":
+        response["result"] = result.result
+    elif result.state == "FAILURE":
+        response["error"] = str(result.result)
+
+    return response

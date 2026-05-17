@@ -1,4 +1,6 @@
+import json
 import uuid
+from dataclasses import asdict
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -32,13 +34,15 @@ def health():
 async def query(req: QueryRequest):
     """
     Streaming endpoint to interact with the Graph-RAG Agent.
+    Emits NDJSON events as the agent processes the request.
     """
     async def stream():
-        # Agno agent.run() can be streamed. We'll simulate a streaming response wrapper 
-        # or just run it synchronously if streaming isn't natively async in this wrapper.
-        # Since run is synchronous in our current setup for gemini-3.0-flash:
-        response = rag_team.run(req.message)
-        yield response.content
+        async for event in rag_team.arun(
+            req.message,
+            stream=True,
+            session_id=req.session_id,
+        ):
+            yield json.dumps(asdict(event)) + "\n"
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
 

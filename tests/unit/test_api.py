@@ -1,18 +1,48 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
+from dataclasses import dataclass
 from fastapi.testclient import TestClient
+
+@dataclass
+class MockStreamEvent:
+    event: str = "run_content"
+    content: str = "mocked grounded answer"
+    content_type: str = "str"
+    created_at: int = 1234567890
+    agent_id: str = "test-agent"
+    agent_name: str = "Graph-RAG Master"
+    run_id: str | None = None
+    parent_run_id: str | None = None
+    session_id: str | None = None
+    workflow_id: str | None = None
+    workflow_run_id: str | None = None
+    step_id: str | None = None
+    step_name: str | None = None
+    step_index: int | None = None
+    nested_depth: int = 0
+    tools: list | None = None
+    reasoning_content: str | None = None
+    model_provider_data: dict | None = None
+    citations: object | None = None
+    response_audio: object | None = None
+    image: object | None = None
+    references: list | None = None
+    additional_input: list | None = None
+    reasoning_steps: list | None = None
+    reasoning_messages: list | None = None
+    workflow_agent: bool = False
+
+async def mock_arun_stream(*args, **kwargs):
+    yield MockStreamEvent()
 
 @pytest.fixture
 def client():
-    # We patch build_rag_team and agentos at import level
     with patch("agents.rag_team.build_rag_team") as mock_build:
         mock_agent = MagicMock()
-        mock_agent.run.return_value = MagicMock(content="mocked grounded answer")
+        mock_agent.arun = mock_arun_stream
         mock_build.return_value = mock_agent
         
-        # Now import app (this evaluates rag_team = build_rag_team())
         from agentos import app
-        # Replace the instantiated rag_team with our mock directly in the module
         with patch("agentos.rag_team", mock_agent):
             yield TestClient(app)
 
@@ -28,6 +58,18 @@ def test_query_valid_body_returns_200(client):
     assert r.status_code == 200
     text = "".join(r.iter_text())
     assert "mocked grounded answer" in text
+
+@pytest.mark.unit
+def test_query_streams_ndjson_lines(client):
+    r = client.post("/query", json={"message": "What is LanceDB?"})
+    assert r.status_code == 200
+    lines = [line for line in r.iter_lines() if line.strip()]
+    assert len(lines) >= 1
+    import json
+    for line in lines:
+        parsed = json.loads(line)
+        assert "event" in parsed
+        assert "content" in parsed
 
 @pytest.mark.unit
 def test_query_missing_message_returns_422(client):

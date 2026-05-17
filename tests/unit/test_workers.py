@@ -14,6 +14,12 @@ def _make_task_decorator():
     return task_decorator
 
 
+# Import db modules once at module load time (C-extension deps can't be reloaded)
+import db.graph_store
+import db.vector_store
+import db.lifecycle.memory_manager
+
+
 @pytest.fixture
 def mock_celery():
     """Mock celery module to avoid import errors."""
@@ -26,9 +32,9 @@ def mock_celery():
 @pytest.fixture
 def tasks_module(mock_celery):
     """Import workers.tasks after celery is patched, then replace memory_manager."""
-    with patch("db.lifecycle.memory_manager.ExtractorAgent"):
-        with patch("tools.graph_tool.init_graph_store", return_value=MagicMock()):
-            with patch("tools.vector_tool.init_vector_store", return_value=MagicMock()):
+    with patch.object(db.graph_store, "GraphStore", return_value=MagicMock()):
+        with patch.object(db.vector_store, "VectorStore", return_value=MagicMock()):
+            with patch.object(db.lifecycle.memory_manager, "ExtractorAgent"):
                 from workers import tasks
                 tasks.memory_manager = MagicMock()
                 yield tasks

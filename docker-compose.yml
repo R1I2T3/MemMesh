@@ -12,9 +12,10 @@ services:
       - ./data/neo4j/logs:/logs
       - ./data/neo4j/import:/var/lib/neo4j/import
       - ./data/neo4j/plugins:/plugins
+    env_file:
+      - .env
     environment:
-      # Change this password before going to production
-      - NEO4J_AUTH=neo4j/password
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password}
 
       # Optional: Uncomment below to enable the APOC plugin if you need advanced graph algorithms
       # - NEO4J_apoc_export_file_enabled=true
@@ -31,8 +32,10 @@ services:
       - "9001:9001"
     volumes:
       - ./data/minio/data:/data
+    env_file:
+      - .env
     environment:
-      - MINIO_ROOT_USER=admin
-      - MINIO_ROOT_PASSWORD=password
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-admin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-password}
     command: server /data --console-address ":9001"
     restart: unless-stopped

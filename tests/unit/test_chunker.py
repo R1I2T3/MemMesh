@@ -1,5 +1,6 @@
 import pytest
-from utils.chunker import chunk_text
+from unittest.mock import patch, MagicMock
+from utils.chunker import chunk_text, extract_text_from_url
 
 @pytest.mark.unit
 def test_empty_input_returns_empty_list():
@@ -33,3 +34,37 @@ def test_overlap_is_preserved_between_consecutive_chunks():
         assert len(result[0]["text"]) <= 100
         assert len(result[1]["text"]) <= 100
         assert len(result) > 1
+
+@pytest.mark.unit
+@patch("utils.chunker.requests.get")
+def test_extract_text_from_url_retries_on_timeout(mock_get):
+    """Should retry on transient failures and succeed eventually."""
+    import requests
+
+    def failing_response(*args, **kwargs):
+        raise requests.Timeout("Connection timed out")
+
+    success_response = MagicMock()
+    success_response.text = "<html><body>Success after retry</body></html>"
+    success_response.raise_for_status = MagicMock()
+
+    mock_get.side_effect = [
+        requests.Timeout("timeout 1"),
+        requests.Timeout("timeout 2"),
+        success_response,
+    ]
+
+    result = extract_text_from_url("http://example.com", max_retries=3)
+    assert "Success after retry" in result
+    assert mock_get.call_count == 3
+
+@pytest.mark.unit
+@patch("utils.chunker.requests.get")
+def test_extract_text_from_url_fails_after_max_retries(mock_get):
+    """Should raise RuntimeError after exhausting all retries."""
+    import requests
+    mock_get.side_effect = requests.ConnectionError("connection refused")
+
+    with pytest.raises(RuntimeError, match="after 2 attempts"):
+        extract_text_from_url("http://example.com", max_retries=2)
+    assert mock_get.call_count == 2

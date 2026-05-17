@@ -2,6 +2,7 @@ import os
 import json
 import email
 from email import policy
+import time
 import requests
 from bs4 import BeautifulSoup
 from typing import List, Dict, Any
@@ -62,19 +63,33 @@ def extract_text_from_file(file_path: str) -> str:
     else:
         raise ValueError(f"Unsupported file extension for plain text extraction: {ext}")
 
-def extract_text_from_url(url: str) -> str:
-    """Extracts clean text from a web page."""
-    response = requests.get(url, timeout=10)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
-    
-    for script in soup(["script", "style"]):
-        script.extract()
-        
-    text = soup.get_text(separator=" ")
-    lines = (line.strip() for line in text.splitlines())
-    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    return '\n'.join(chunk for chunk in chunks if chunk)
+def extract_text_from_url(url: str, max_retries: int = 3, backoff_factor: float = 1.0) -> str:
+    """Extracts clean text from a web page with retry logic for transient failures."""
+    last_exception = None
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+
+            for script in soup(["script", "style"]):
+                script.extract()
+
+            text = soup.get_text(separator=" ")
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            return '\n'.join(chunk for chunk in chunks if chunk)
+
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_exception = e
+            if attempt < max_retries - 1:
+                wait_time = backoff_factor * (2 ** attempt)
+                time.sleep(wait_time)
+
+    raise RuntimeError(
+        f"Failed to extract text from {url} after {max_retries} attempts: {last_exception}"
+    )
 
 def chunk_text(
     text: str,

@@ -20,6 +20,7 @@ dependencies = [
     "python-pptx>=1.0.2",
     "requests>=2.34.2",
     "sentence-transformers>=5.1.2",
+    "celery[redis]>=5.4.0",
     "uvicorn>=0.47.0",
 ]
 

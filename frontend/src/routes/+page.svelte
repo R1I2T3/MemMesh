@@ -1,22 +1,4 @@
-<!-- frontend/src/routes/+page.svelte -->
-<script lang="ts">
-  import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { authStore } from '$lib/auth';
 
-  onMount(() => {
-    const unsubscribe = authStore.subscribe((state) => {
-      if (!state.isLoading) {
-        if (state.isAuthenticated) {
-          goto('/dashboard');
-        } else {
-          goto('/login');
-        }
-        unsubscribe();
-      }
-    });
-  });
-</script>
 
 <div class="loading-screen" role="status" aria-label="Redirecting...">
   <div class="loading-spinner"></div>

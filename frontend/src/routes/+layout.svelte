@@ -18,12 +18,24 @@
     const state = $authStore;
     const currentPath = $page.url.pathname as string;
 
-    if (!state.isLoading) {
-      if (!state.isAuthenticated && !publicPaths.includes(currentPath)) {
-        goto('/login');
-      }
-      if (state.isAuthenticated && currentPath === '/login') {
-        goto('/dashboard');
+    if (!state.isLoading && currentPath) {
+      // Normalize path to ignore trailing slashes (except for the root path)
+      const cleanPath = currentPath.endsWith('/') && currentPath !== '/' 
+        ? currentPath.slice(0, -1) 
+        : currentPath;
+
+      const isPublic = publicPaths.includes(cleanPath);
+
+      if (!state.isAuthenticated && !isPublic) {
+        if (currentPath !== '/login') {
+          goto('/login');
+        }
+      } else if (state.isAuthenticated) {
+        if (cleanPath === '/login' || cleanPath === '/') {
+          if (currentPath !== '/dashboard') {
+            goto('/dashboard');
+          }
+        }
       }
     }
   });

@@ -113,19 +113,19 @@ def test_require_global_role_unauthorized():
     payload = {"user_id": "u1", "role": "user"}
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(dep(payload=payload))
-    
+
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
     assert exc_info.value.detail == "Insufficient permissions"
 
 
 def test_require_team_role_global_admin():
     dep = require_team_role("user")
-    
+
     # admin bypass
     payload_admin = {"user_id": "u1", "role": "admin", "team_memberships": []}
     result = asyncio.run(dep(team_id="team-X", payload=payload_admin))
     assert result == payload_admin
-    
+
     # superadmin bypass
     payload_super = {"user_id": "u1", "role": "superadmin", "team_memberships": []}
     result = asyncio.run(dep(team_id="team-X", payload=payload_super))
@@ -134,12 +134,12 @@ def test_require_team_role_global_admin():
 
 def test_require_team_role_member_as_user():
     dep = require_team_role("user")
-    
+
     # Standard team member with role: "user" accessing their own team as user
     payload = {
         "user_id": "u1",
         "role": "user",
-        "team_memberships": [{"team_id": "team-A", "role": "user"}]
+        "team_memberships": [{"team_id": "team-A", "role": "user"}],
     }
     result = asyncio.run(dep(team_id="team-A", payload=payload))
     assert result == payload
@@ -147,28 +147,28 @@ def test_require_team_role_member_as_user():
 
 def test_require_team_role_member_not_in_team():
     dep = require_team_role("user")
-    
+
     # Standard team member accessing a team they are not in
     payload = {
         "user_id": "u1",
         "role": "user",
-        "team_memberships": [{"team_id": "team-A", "role": "user"}]
+        "team_memberships": [{"team_id": "team-A", "role": "user"}],
     }
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(dep(team_id="team-B", payload=payload))
-    
+
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
     assert exc_info.value.detail == "Not a member of this team"
 
 
 def test_require_team_role_lead_as_lead():
     dep = require_team_role("lead")
-    
+
     # Team lead with role: "lead" accessing their own team as lead
     payload = {
         "user_id": "u1",
         "role": "user",
-        "team_memberships": [{"team_id": "team-A", "role": "lead"}]
+        "team_memberships": [{"team_id": "team-A", "role": "lead"}],
     }
     result = asyncio.run(dep(team_id="team-A", payload=payload))
     assert result == payload
@@ -176,12 +176,12 @@ def test_require_team_role_lead_as_lead():
 
 def test_require_team_role_lead_as_user():
     dep = require_team_role("user")
-    
+
     # Team lead accessing their own team as user (should be permitted since lead is >= user)
     payload = {
         "user_id": "u1",
         "role": "user",
-        "team_memberships": [{"team_id": "team-A", "role": "lead"}]
+        "team_memberships": [{"team_id": "team-A", "role": "lead"}],
     }
     result = asyncio.run(dep(team_id="team-A", payload=payload))
     assert result == payload
@@ -189,16 +189,16 @@ def test_require_team_role_lead_as_user():
 
 def test_require_team_role_member_as_lead():
     dep = require_team_role("lead")
-    
+
     # Standard team member (role: "user") accessing their own team with min_role="lead"
     payload = {
         "user_id": "u1",
         "role": "user",
-        "team_memberships": [{"team_id": "team-A", "role": "user"}]
+        "team_memberships": [{"team_id": "team-A", "role": "user"}],
     }
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(dep(team_id="team-A", payload=payload))
-    
+
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
     assert exc_info.value.detail == "Team lead permission required"
 
@@ -214,18 +214,24 @@ def test_rbac_integration():
         return {"ok": True}
 
     @app.get("/teams/{team_id}/lead-only")
-    def team_lead_route(team_id: str, payload: dict = Depends(require_team_role("lead"))):
+    def team_lead_route(
+        team_id: str, payload: dict = Depends(require_team_role("lead"))
+    ):
         return {"team_id": team_id, "user_id": payload["user_id"]}
 
     client = TestClient(app)
 
     # 1. Global role: authorized
-    token_admin = create_access_token(user_id="u1", global_role="admin", team_memberships=[])
+    token_admin = create_access_token(
+        user_id="u1", global_role="admin", team_memberships=[]
+    )
     res = client.get("/global", headers={"Authorization": f"Bearer {token_admin}"})
     assert res.status_code == 200
 
     # 2. Global role: unauthorized
-    token_user = create_access_token(user_id="u2", global_role="user", team_memberships=[])
+    token_user = create_access_token(
+        user_id="u2", global_role="user", team_memberships=[]
+    )
     res = client.get("/global", headers={"Authorization": f"Bearer {token_user}"})
     assert res.status_code == 403
     assert res.json()["detail"] == "Insufficient permissions"
@@ -234,9 +240,11 @@ def test_rbac_integration():
     token_lead = create_access_token(
         user_id="u3",
         global_role="user",
-        team_memberships=[{"team_id": "team-123", "role": "lead"}]
+        team_memberships=[{"team_id": "team-123", "role": "lead"}],
     )
-    res = client.get("/teams/team-123/lead-only", headers={"Authorization": f"Bearer {token_lead}"})
+    res = client.get(
+        "/teams/team-123/lead-only", headers={"Authorization": f"Bearer {token_lead}"}
+    )
     assert res.status_code == 200
     assert res.json() == {"team_id": "team-123", "user_id": "u3"}
 
@@ -244,9 +252,11 @@ def test_rbac_integration():
     token_member = create_access_token(
         user_id="u4",
         global_role="user",
-        team_memberships=[{"team_id": "team-123", "role": "user"}]
+        team_memberships=[{"team_id": "team-123", "role": "user"}],
     )
-    res = client.get("/teams/team-123/lead-only", headers={"Authorization": f"Bearer {token_member}"})
+    res = client.get(
+        "/teams/team-123/lead-only", headers={"Authorization": f"Bearer {token_member}"}
+    )
     assert res.status_code == 403
     assert res.json()["detail"] == "Team lead permission required"
 
@@ -254,9 +264,12 @@ def test_rbac_integration():
     token_non_member = create_access_token(
         user_id="u5",
         global_role="user",
-        team_memberships=[{"team_id": "team-456", "role": "lead"}]
+        team_memberships=[{"team_id": "team-456", "role": "lead"}],
     )
-    res = client.get("/teams/team-123/lead-only", headers={"Authorization": f"Bearer {token_non_member}"})
+    res = client.get(
+        "/teams/team-123/lead-only",
+        headers={"Authorization": f"Bearer {token_non_member}"},
+    )
     assert res.status_code == 403
     assert res.json()["detail"] == "Not a member of this team"
 
@@ -264,7 +277,5 @@ def test_rbac_integration():
 def test_require_team_role_invalid_min_role():
     with pytest.raises(ValueError) as exc_info:
         require_team_role("invalid-role-name")
-    
+
     assert "Invalid min_role: 'invalid-role-name'" in str(exc_info.value)
-
-

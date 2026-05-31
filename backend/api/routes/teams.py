@@ -3,7 +3,6 @@
 
 import sqlite3
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
@@ -121,7 +120,11 @@ async def delete_team(team_id: str, conn: sqlite3.Connection = Depends(get_db)):
     return
 
 
-@router.post("/{team_id}/members", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{team_id}/members",
+    response_model=MemberResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def add_team_member(
     team_id: str,
     body: MemberAddRequest,
@@ -130,7 +133,9 @@ async def add_team_member(
 ):
     """Add a user to a team (Admin/Superadmin only)."""
     # Verify that team_id exists in teams
-    team = conn.execute("SELECT team_id FROM teams WHERE team_id = ?", (team_id,)).fetchone()
+    team = conn.execute(
+        "SELECT team_id FROM teams WHERE team_id = ?", (team_id,)
+    ).fetchone()
     if not team:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -138,7 +143,9 @@ async def add_team_member(
         )
 
     # Verify that user_id exists in users
-    user = conn.execute("SELECT email FROM users WHERE user_id = ?", (body.user_id,)).fetchone()
+    user = conn.execute(
+        "SELECT email FROM users WHERE user_id = ?", (body.user_id,)
+    ).fetchone()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -152,9 +159,18 @@ async def add_team_member(
                 """
                 INSERT INTO team_members (membership_id, user_id, team_id, role, added_by)
                 VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(user_id, team_id) DO UPDATE SET role = excluded.role
+                ON CONFLICT(user_id, team_id) DO UPDATE SET 
+                    role = excluded.role,
+                    added_by = excluded.added_by,
+                    added_at = datetime('now')
                 """,
-                (membership_id, body.user_id, team_id, body.role, current_user["user_id"]),
+                (
+                    membership_id,
+                    body.user_id,
+                    team_id,
+                    body.role,
+                    current_user["user_id"],
+                ),
             )
     except sqlite3.IntegrityError:
         raise HTTPException(
@@ -176,7 +192,9 @@ async def list_team_members(
 ):
     """Retrieve all members of a team (Admin/Superadmin only)."""
     # Verify that team_id exists in teams
-    team = conn.execute("SELECT team_id FROM teams WHERE team_id = ?", (team_id,)).fetchone()
+    team = conn.execute(
+        "SELECT team_id FROM teams WHERE team_id = ?", (team_id,)
+    ).fetchone()
     if not team:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -255,4 +273,3 @@ async def list_users(conn: sqlite3.Connection = Depends(get_db)):
         )
         for row in rows
     ]
-

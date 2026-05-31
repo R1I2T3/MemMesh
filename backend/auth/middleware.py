@@ -45,6 +45,7 @@ def require_global_role(required_roles: list[str]) -> Callable[..., Any]:
     Raises:
         HTTPException 403 if the user's global role is not in required_roles.
     """
+
     async def dependency(payload: dict = Depends(require_auth)) -> dict:
         global_role = payload.get("role")
         if global_role not in required_roles:
@@ -103,4 +104,3 @@ def require_team_role(min_role: str) -> Callable[..., Any]:
         return payload
 
     return dependency
-

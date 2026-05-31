@@ -23,6 +23,7 @@ def create_test_user(user_id: str, email: str):
 @pytest.fixture(autouse=True)
 def clean_teams():
     """Ensure teams and users tables are clean before and after each test."""
+
     def clean():
         conn = get_connection()
         try:
@@ -32,6 +33,7 @@ def clean_teams():
                 conn.execute("DELETE FROM users WHERE email != 'admin@example.com'")
         finally:
             conn.close()
+
     clean()
     yield
     clean()
@@ -40,21 +42,27 @@ def clean_teams():
 @pytest.fixture()
 def admin_headers():
     create_test_user("admin-user-123", "admin_user@test.com")
-    token = create_access_token(user_id="admin-user-123", global_role="admin", team_memberships=[])
+    token = create_access_token(
+        user_id="admin-user-123", global_role="admin", team_memberships=[]
+    )
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture()
 def superadmin_headers():
     create_test_user("super-user-123", "super_user@test.com")
-    token = create_access_token(user_id="super-user-123", global_role="superadmin", team_memberships=[])
+    token = create_access_token(
+        user_id="super-user-123", global_role="superadmin", team_memberships=[]
+    )
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture()
 def user_headers():
     create_test_user("std-user-123", "std_user@test.com")
-    token = create_access_token(user_id="std-user-123", global_role="user", team_memberships=[])
+    token = create_access_token(
+        user_id="std-user-123", global_role="user", team_memberships=[]
+    )
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -153,7 +161,9 @@ def test_delete_team_success(client, admin_headers):
 
 def test_delete_team_nonexistent_returns_404(client, admin_headers):
     """Verify that deleting a non-existent team returns 404."""
-    response = client.delete("/admin/teams/non-existent-uuid-123", headers=admin_headers)
+    response = client.delete(
+        "/admin/teams/non-existent-uuid-123", headers=admin_headers
+    )
     assert response.status_code == 404
     assert response.json()["detail"] == "Team not found"
 
@@ -343,7 +353,7 @@ def test_list_team_members_success(client, admin_headers):
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 2
-    
+
     # Check details
     m1 = next(x for x in data if x["user_id"] == "user-id-1")
     assert m1["email"] == "user1@test.com"
@@ -356,7 +366,9 @@ def test_list_team_members_success(client, admin_headers):
 
 def test_list_team_members_nonexistent_team_fails(client, admin_headers):
     """Verify listing members of a nonexistent team returns 404."""
-    resp = client.get("/admin/teams/nonexistent-team-uuid/members", headers=admin_headers)
+    resp = client.get(
+        "/admin/teams/nonexistent-team-uuid/members", headers=admin_headers
+    )
     assert resp.status_code == 404
     assert resp.json()["detail"] == "Team not found"
 
@@ -420,24 +432,32 @@ def test_remove_team_member_nonexistent_fails(client, admin_headers):
 def test_member_endpoints_reject_unauthorized(client, user_headers):
     """Verify that unauthorized (non-admin) requests to all these member routes are rejected."""
     # POST
-    resp_post_unauth = client.post("/admin/teams/some-team/members", json={"user_id": "user-id", "role": "user"})
+    resp_post_unauth = client.post(
+        "/admin/teams/some-team/members", json={"user_id": "user-id", "role": "user"}
+    )
     assert resp_post_unauth.status_code == 401
-    
-    resp_post_user = client.post("/admin/teams/some-team/members", json={"user_id": "user-id", "role": "user"}, headers=user_headers)
+
+    resp_post_user = client.post(
+        "/admin/teams/some-team/members",
+        json={"user_id": "user-id", "role": "user"},
+        headers=user_headers,
+    )
     assert resp_post_user.status_code == 403
 
     # GET
     resp_get_unauth = client.get("/admin/teams/some-team/members")
     assert resp_get_unauth.status_code == 401
-    
+
     resp_get_user = client.get("/admin/teams/some-team/members", headers=user_headers)
     assert resp_get_user.status_code == 403
 
     # DELETE
     resp_del_unauth = client.delete("/admin/teams/some-team/members/user-id")
     assert resp_del_unauth.status_code == 401
-    
-    resp_del_user = client.delete("/admin/teams/some-team/members/user-id", headers=user_headers)
+
+    resp_del_user = client.delete(
+        "/admin/teams/some-team/members/user-id", headers=user_headers
+    )
     assert resp_del_user.status_code == 403
 
 
@@ -449,13 +469,13 @@ def test_list_users_success(client, admin_headers):
     response = client.get("/admin/users", headers=admin_headers)
     assert response.status_code == 200
     data = response.json()
-    
+
     # We should have admin, user1, user2, plus the admin-user-123 created in fixture
     assert len(data) >= 3
     emails = {user["email"] for user in data}
     assert "user1@test.com" in emails
     assert "user2@test.com" in emails
-    
+
     # Verify field structure
     user1 = next(u for u in data if u["user_id"] == "user-id-1")
     assert user1["email"] == "user1@test.com"
@@ -522,3 +542,61 @@ def test_add_member_upsert_role(client, admin_headers):
     assert members[0]["user_id"] == "user-id-upsert"
     assert members[0]["role"] == "lead"
 
+
+def test_add_member_upsert_updates_metadata(client, admin_headers):
+    """Verify that adding an existing member again with a different admin updates the added_by metadata."""
+    # 1. Create team
+    team_resp = client.post(
+        "/admin/teams",
+        json={"name": "Metadata Team"},
+        headers=admin_headers,
+    )
+    assert team_resp.status_code == 201
+    team_id = team_resp.json()["team_id"]
+
+    # 2. Create user
+    create_test_user("user-id-metadata", "metadata@test.com")
+
+    # 3. Add as user by first admin
+    resp1 = client.post(
+        f"/admin/teams/{team_id}/members",
+        json={"user_id": "user-id-metadata", "role": "user"},
+        headers=admin_headers,
+    )
+    assert resp1.status_code == 201
+
+    # Inspect DB before upsert
+    conn = get_connection()
+    try:
+        row1 = conn.execute(
+            "SELECT added_by, added_at FROM team_members WHERE team_id = ? AND user_id = ?",
+            (team_id, "user-id-metadata"),
+        ).fetchone()
+        assert row1["added_by"] == "admin-user-123"
+    finally:
+        conn.close()
+
+    # 4. Add by a second admin
+    create_test_user("admin-user-456", "admin2@test.com")
+    token2 = create_access_token(
+        user_id="admin-user-456", global_role="admin", team_memberships=[]
+    )
+    admin2_headers = {"Authorization": f"Bearer {token2}"}
+
+    resp2 = client.post(
+        f"/admin/teams/{team_id}/members",
+        json={"user_id": "user-id-metadata", "role": "lead"},
+        headers=admin2_headers,
+    )
+    assert resp2.status_code == 201
+
+    # Inspect DB after upsert
+    conn = get_connection()
+    try:
+        row2 = conn.execute(
+            "SELECT added_by, added_at FROM team_members WHERE team_id = ? AND user_id = ?",
+            (team_id, "user-id-metadata"),
+        ).fetchone()
+        assert row2["added_by"] == "admin-user-456"
+    finally:
+        conn.close()

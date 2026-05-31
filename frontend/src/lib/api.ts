@@ -1,8 +1,9 @@
 import { get } from 'svelte/store';
 import { authStore, logout } from './auth';
 import type { LoginRequest, TokenResponse, RefreshedTokenResponse, User, Team, TeamMember, UserListItem } from './types';
+import { PUBLIC_API_BASE } from '$env/static/public';
 
-const API_BASE = 'http://127.0.0.1:8081';
+const API_BASE = PUBLIC_API_BASE || 'http://127.0.0.1:8081';
 
 class ApiClient {
   private refreshPromise: Promise<boolean> | null = null;

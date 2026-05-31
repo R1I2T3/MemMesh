@@ -75,7 +75,8 @@ async def login(body: LoginRequest, conn: sqlite3.Connection = Depends(get_db)):
             (row["user_id"],),
         ).fetchall()
         team_memberships = [
-            {"team_id": m["team_id"], "role": m["role"], "name": m["name"]} for m in members
+            {"team_id": m["team_id"], "role": m["role"], "name": m["name"]}
+            for m in members
         ]
     except sqlite3.OperationalError as e:
         # team_members table may not exist yet in Phase 1
@@ -139,7 +140,8 @@ async def refresh(body: RefreshRequest, conn: sqlite3.Connection = Depends(get_d
             (row["user_id"],),
         ).fetchall()
         team_memberships = [
-            {"team_id": m["team_id"], "role": m["role"], "name": m["name"]} for m in members
+            {"team_id": m["team_id"], "role": m["role"], "name": m["name"]}
+            for m in members
         ]
     except sqlite3.OperationalError as e:
         if "no such table: team_members" not in str(e):

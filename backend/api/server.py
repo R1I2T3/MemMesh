@@ -6,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes.auth import router as auth_router
 from api.routes.health import router as health_router
-from api.routes.teams import router as teams_router, users_router
+from api.routes.teams import router as teams_router
+from api.routes.teams import users_router
 
 
 def create_app() -> FastAPI:
@@ -22,7 +23,9 @@ def create_app() -> FastAPI:
 
     allowed_origins = [
         origin.strip()
-        for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+        for origin in os.getenv(
+            "ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+        ).split(",")
         if origin.strip()
     ]
     app.add_middleware(

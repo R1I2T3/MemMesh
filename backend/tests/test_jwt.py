@@ -18,13 +18,13 @@ def test_verify_valid_token():
     token = create_access_token(
         user_id="user-1",
         global_role="admin",
-        team_memberships=[{"team_id": "t1", "role": "team_lead"}],
+        team_memberships=[{"team_id": "t1", "role": "lead"}],
     )
     payload = verify_token(token)
     assert payload is not None
     assert payload["user_id"] == "user-1"
     assert payload["role"] == "admin"
-    assert payload["team_memberships"] == [{"team_id": "t1", "role": "team_lead"}]
+    assert payload["team_memberships"] == [{"team_id": "t1", "role": "lead"}]
 
 
 def test_verify_invalid_token_returns_none():

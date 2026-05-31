@@ -72,9 +72,10 @@ async def login(body: LoginRequest, conn: sqlite3.Connection = Depends(get_db)):
         team_memberships = [
             {"team_id": m["team_id"], "role": m["role"]} for m in members
         ]
-    except sqlite3.OperationalError:
+    except sqlite3.OperationalError as e:
         # team_members table may not exist yet in Phase 1
-        pass
+        if "no such table: team_members" not in str(e):
+            raise
 
     access_token = create_access_token(
         user_id=row["user_id"],
@@ -130,8 +131,9 @@ async def refresh(body: RefreshRequest, conn: sqlite3.Connection = Depends(get_d
         team_memberships = [
             {"team_id": m["team_id"], "role": m["role"]} for m in members
         ]
-    except sqlite3.OperationalError:
-        pass
+    except sqlite3.OperationalError as e:
+        if "no such table: team_members" not in str(e):
+            raise
 
     # Issue a fresh access token using current DB values
     access_token = create_access_token(

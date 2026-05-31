@@ -15,7 +15,7 @@ def test_require_auth_valid_token():
     token = create_access_token(
         user_id="user-123",
         global_role="admin",
-        team_memberships=[{"team_id": "team-A", "role": "member"}],
+        team_memberships=[{"team_id": "team-A", "role": "user"}],
     )
     credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
@@ -25,7 +25,7 @@ def test_require_auth_valid_token():
     assert payload is not None
     assert payload["user_id"] == "user-123"
     assert payload["role"] == "admin"
-    assert payload["team_memberships"] == [{"team_id": "team-A", "role": "member"}]
+    assert payload["team_memberships"] == [{"team_id": "team-A", "role": "user"}]
 
 
 def test_require_auth_invalid_token():

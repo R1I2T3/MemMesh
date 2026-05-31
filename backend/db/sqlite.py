@@ -31,7 +31,7 @@ def run_migrations() -> None:
             ")"
         )
         applied = {
-            row[0]
+            row["filename"]
             for row in conn.execute("SELECT filename FROM _migrations").fetchall()
         }
 
@@ -56,22 +56,28 @@ def seed_admin() -> None:
 
     conn = get_connection()
     try:
-        existing = conn.execute(
-            "SELECT user_id FROM users WHERE email = ?", (settings.admin_email,)
-        ).fetchone()
+        with conn:
+            existing = conn.execute(
+                "SELECT user_id FROM users WHERE email = ?", (settings.admin_email,)
+            ).fetchone()
 
-        if existing:
-            print(f"Admin account already exists: {settings.admin_email}")
-            return
+            if existing:
+                print(f"Admin account already exists: {settings.admin_email}")
+                return
 
-        user_id = str(uuid.uuid4())
-        password_hash = hash_password(settings.admin_password)
-        conn.execute(
-            "INSERT OR IGNORE INTO users (user_id, email, password_hash, global_role) "
-            "VALUES (?, ?, ?, ?)",
-            (user_id, settings.admin_email, password_hash, "superadmin"),
-        )
-        conn.commit()
-        print(f"Superadmin created: {settings.admin_email}")
+            user_id = str(uuid.uuid4())
+            password_hash = hash_password(settings.admin_password)
+            conn.execute(
+                "INSERT OR IGNORE INTO users (user_id, email, password_hash, global_role) "
+                "VALUES (?, ?, ?, ?)",
+                (user_id, settings.admin_email, password_hash, "superadmin"),
+            )
+            print(f"Superadmin created: {settings.admin_email}")
+    except sqlite3.OperationalError as e:
+        if "no such table: users" in str(e):
+            raise RuntimeError(
+                "Database tables do not exist. Please run migrations before seeding."
+            ) from e
+        raise
     finally:
         conn.close()

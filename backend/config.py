@@ -64,6 +64,19 @@ def load_settings() -> Settings:
     except ValueError as e:
         raise ValueError("API_PORT must be a valid integer.") from e
 
+    # Normalize data directories relative to backend root if they are relative
+    backend_dir = Path(__file__).resolve().parent
+    data_dir_env = os.getenv("DATA_DIR", "./data")
+    sqlite_path_env = os.getenv("SQLITE_PATH", "./data/db.sqlite3")
+
+    data_dir_path = Path(data_dir_env)
+    if not data_dir_path.is_absolute():
+        data_dir_path = (backend_dir / data_dir_path).resolve()
+
+    sqlite_path_obj = Path(sqlite_path_env)
+    if not sqlite_path_obj.is_absolute():
+        sqlite_path_obj = (backend_dir / sqlite_path_obj).resolve()
+
     return Settings(
         admin_email=os.getenv("ADMIN_EMAIL", "admin@example.com"),
         admin_password=admin_password,
@@ -71,8 +84,8 @@ def load_settings() -> Settings:
         jwt_expiry_minutes=jwt_expiry_minutes,
         api_host=os.getenv("API_HOST", "127.0.0.1"),
         api_port=api_port,
-        data_dir=os.getenv("DATA_DIR", "./data"),
-        sqlite_path=os.getenv("SQLITE_PATH", "./data/db.sqlite3"),
+        data_dir=str(data_dir_path),
+        sqlite_path=str(sqlite_path_obj),
     )
 
 

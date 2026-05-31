@@ -39,11 +39,11 @@ def run_migrations() -> None:
         for mf in migration_files:
             if mf.name not in applied:
                 sql = mf.read_text()
-                conn.executescript(sql)
-                conn.execute(
-                    "INSERT INTO _migrations (filename) VALUES (?)", (mf.name,)
-                )
-                conn.commit()
+                with conn:
+                    conn.executescript(sql)
+                    conn.execute(
+                        "INSERT INTO _migrations (filename) VALUES (?)", (mf.name,)
+                    )
                 print(f"Applied migration: {mf.name}")
 
     finally:
@@ -67,7 +67,7 @@ def seed_admin() -> None:
         user_id = str(uuid.uuid4())
         password_hash = hash_password(settings.admin_password)
         conn.execute(
-            "INSERT INTO users (user_id, email, password_hash, global_role) "
+            "INSERT OR IGNORE INTO users (user_id, email, password_hash, global_role) "
             "VALUES (?, ?, ?, ?)",
             (user_id, settings.admin_email, password_hash, "superadmin"),
         )

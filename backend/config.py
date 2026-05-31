@@ -33,7 +33,7 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    """Load settings from environment variables. Raises ValueError on missing required vars."""
+    """Load settings from environment variables. Raises ValueError on invalid types."""
     jwt_secret = os.getenv("JWT_SECRET", "")
     if not jwt_secret or jwt_secret == "change-this-secret-in-production":
         import warnings
@@ -45,13 +45,32 @@ def load_settings() -> Settings:
         if not jwt_secret:
             jwt_secret = "dev-fallback-secret-do-not-use-in-production"
 
+    admin_password = os.getenv("ADMIN_PASSWORD", "changeme")
+    if admin_password == "changeme":
+        import warnings
+        warnings.warn(
+            "ADMIN_PASSWORD is set to the default value 'changeme'. "
+            "Set a secure password in .env for production.",
+            stacklevel=2,
+        )
+
+    try:
+        jwt_expiry_minutes = int(os.getenv("JWT_EXPIRY_MINUTES", "60"))
+    except ValueError as e:
+        raise ValueError("JWT_EXPIRY_MINUTES must be a valid integer.") from e
+
+    try:
+        api_port = int(os.getenv("API_PORT", "8000"))
+    except ValueError as e:
+        raise ValueError("API_PORT must be a valid integer.") from e
+
     return Settings(
         admin_email=os.getenv("ADMIN_EMAIL", "admin@example.com"),
-        admin_password=os.getenv("ADMIN_PASSWORD", "changeme"),
+        admin_password=admin_password,
         jwt_secret=jwt_secret,
-        jwt_expiry_minutes=int(os.getenv("JWT_EXPIRY_MINUTES", "60")),
+        jwt_expiry_minutes=jwt_expiry_minutes,
         api_host=os.getenv("API_HOST", "127.0.0.1"),
-        api_port=int(os.getenv("API_PORT", "8000")),
+        api_port=api_port,
         data_dir=os.getenv("DATA_DIR", "./data"),
         sqlite_path=os.getenv("SQLITE_PATH", "./data/db.sqlite3"),
     )

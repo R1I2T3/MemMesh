@@ -23,3 +23,24 @@ export interface User {
 export interface ApiError {
   detail: string;
 }
+
+export interface Team {
+  team_id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+}
+
+export interface TeamMember {
+  user_id: string;
+  email: string;
+  role: 'user' | 'lead';
+}
+
+export interface UserListItem {
+  user_id: string;
+  email: string;
+  global_role: string;
+  created_at: string;
+}
+

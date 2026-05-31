@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { authStore, initAuth } from '$lib/auth';
+  import { appState } from '$lib/appState.svelte';
   import favicon from '$lib/assets/favicon.svg';
   import '../app.css';
 
@@ -12,6 +13,7 @@
 
   onMount(() => {
     initAuth();
+    appState.initTheme();
   });
 
   $effect(() => {

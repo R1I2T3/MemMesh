@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { authStore, logout } from './auth';
-import type { LoginRequest, TokenResponse, RefreshedTokenResponse, User } from './types';
+import type { LoginRequest, TokenResponse, RefreshedTokenResponse, User, Team, TeamMember, UserListItem } from './types';
 
 const API_BASE = 'http://127.0.0.1:8081';
 
@@ -147,6 +147,44 @@ class ApiClient {
 
   async getMe(): Promise<User> {
     return this.request<User>('/auth/me');
+  }
+
+  async listTeams(): Promise<Team[]> {
+    return this.request<Team[]>('/admin/teams');
+  }
+
+  async createTeam(data: { name: string; description: string | null }): Promise<Team> {
+    return this.request<Team>('/admin/teams', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteTeam(teamId: string): Promise<void> {
+    return this.request<void>(`/admin/teams/${teamId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async listTeamMembers(teamId: string): Promise<TeamMember[]> {
+    return this.request<TeamMember[]>(`/admin/teams/${teamId}/members`);
+  }
+
+  async addTeamMember(teamId: string, data: { user_id: string; role: 'user' | 'lead' }): Promise<TeamMember> {
+    return this.request<TeamMember>(`/admin/teams/${teamId}/members`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async removeTeamMember(teamId: string, userId: string): Promise<void> {
+    return this.request<void>(`/admin/teams/${teamId}/members/${userId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async listUsers(): Promise<UserListItem[]> {
+    return this.request<UserListItem[]>('/admin/users');
   }
 }
 

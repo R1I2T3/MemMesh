@@ -40,7 +40,7 @@ seed-admin:
 run:
 	$(UVICORN) main:app --host $${API_HOST:-127.0.0.1} --port $${API_PORT:-8000} --reload
 
-run-bg:
+run-bg: stop
 	$(UVICORN) main:app --host $${API_HOST:-127.0.0.1} --port $${API_PORT:-8000} > uvicorn.log 2>&1 & echo $$! > .pid
 	@echo "Server started (PID: $$(cat .pid))"
 

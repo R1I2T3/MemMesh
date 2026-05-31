@@ -18,7 +18,7 @@
       const tokens = await api.login({ email, password });
       const user = await (async () => {
         // Temporarily set the token to fetch user info
-        const response = await fetch('http://localhost:8000/auth/me', {
+        const response = await fetch('http://127.0.0.1:8081/auth/me', {
           headers: { Authorization: `Bearer ${tokens.access_token}` },
         });
         if (!response.ok) throw new Error('Failed to fetch user info');

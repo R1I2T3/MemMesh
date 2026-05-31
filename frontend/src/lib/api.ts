@@ -2,7 +2,7 @@ import { get } from 'svelte/store';
 import { authStore, logout } from './auth';
 import type { LoginRequest, TokenResponse, RefreshedTokenResponse, User } from './types';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = 'http://127.0.0.1:8081';
 
 class ApiClient {
   private refreshPromise: Promise<boolean> | null = null;

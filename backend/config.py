@@ -62,7 +62,7 @@ def load_settings() -> Settings:
         raise ValueError("JWT_EXPIRY_MINUTES must be a valid integer.") from e
 
     try:
-        api_port = int(os.getenv("API_PORT", "8000"))
+        api_port = int(os.getenv("API_PORT", "8081"))
     except ValueError as e:
         raise ValueError("API_PORT must be a valid integer.") from e
 

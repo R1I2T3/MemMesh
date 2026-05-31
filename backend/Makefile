@@ -38,10 +38,10 @@ seed-admin:
 	@echo "Superadmin seeded."
 
 run:
-	$(UVICORN) main:app --host $${API_HOST:-127.0.0.1} --port $${API_PORT:-8000} --reload
+	$(UVICORN) main:app --host $${API_HOST:-127.0.0.1} --port $${API_PORT:-8081} --reload
 
 run-bg: stop
-	$(UVICORN) main:app --host $${API_HOST:-127.0.0.1} --port $${API_PORT:-8000} > uvicorn.log 2>&1 & echo $$! > .pid
+	$(UVICORN) main:app --host $${API_HOST:-127.0.0.1} --port $${API_PORT:-8081} > uvicorn.log 2>&1 & echo $$! > .pid
 	@echo "Server started (PID: $$(cat .pid))"
 
 stop:

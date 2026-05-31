@@ -16,6 +16,7 @@ def create_access_token(
     global_role: str,
     team_memberships: list[dict[str, str]],
     expiry_minutes: int | None = None,
+    token_type: str = "access",
 ) -> str:
     """Create a signed JWT access token.
 
@@ -24,6 +25,7 @@ def create_access_token(
         global_role: The user's global role ('user', 'admin', 'superadmin').
         team_memberships: List of dicts with 'team_id' and 'role' keys.
         expiry_minutes: Override expiry. Defaults to settings.jwt_expiry_minutes.
+        token_type: The type of token ('access' or 'refresh').
 
     Returns:
         Encoded JWT string.
@@ -40,6 +42,7 @@ def create_access_token(
         "team_memberships": team_memberships,
         "exp": expire,
         "iat": now,
+        "typ": token_type,
     }
 
     return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)

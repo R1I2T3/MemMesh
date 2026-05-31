@@ -1,34 +1,30 @@
-.PHONY: stack-up stack-down test-unit test-e2e format lint
+# Makefile (project root) — orchestrates backend + frontend
 
-PID_DIR := .pids
+.PHONY: install setup run test test-e2e clean
 
-stack-up: | $(PID_DIR)
-	docker compose up -d
-	@echo "Starting uvicorn on port 7777..."
-	uv run uvicorn agentos:app --port 7777 --reload & echo $$! > $(PID_DIR)/uvicorn.pid
-	@echo "Starting Next.js dev server..."
-	(cd frontend && npm run dev) & echo $$! > $(PID_DIR)/next.pid
-	@echo "Stack is up. PIDs tracked in $(PID_DIR)/"
+install:
+	$(MAKE) -C backend install
+	cd frontend && npm install
 
-stack-down:
-	docker compose down
-	@if [ -f $(PID_DIR)/uvicorn.pid ]; then \
-		kill $$(cat $(PID_DIR)/uvicorn.pid) 2>/dev/null || true; \
-		rm -f $(PID_DIR)/uvicorn.pid; \
-	fi
-	@if [ -f $(PID_DIR)/next.pid ]; then \
-		kill $$(cat $(PID_DIR)/next.pid) 2>/dev/null || true; \
-		rm -f $(PID_DIR)/next.pid; \
-	fi
-	@echo "Stack is down."
+setup:
+	$(MAKE) -C backend setup
+	$(MAKE) -C backend migrate
+	$(MAKE) -C backend seed-admin
 
-$(PID_DIR):
-	mkdir -p $(PID_DIR)
+run:
+	@echo "Starting backend on :8081 and frontend on :5173..."
+	@$(MAKE) -C backend run-bg
+	@cd frontend && npm run dev
 
-test-unit:
-	uv run pytest tests/unit -v
+test:
+	$(MAKE) -C backend test
+
+test-api:
+	$(MAKE) -C backend test
 
 test-e2e:
-	uv run pytest tests/e2e -m e2e -v
+	cd frontend && npx playwright test
 
-test-all: test-unit test-e2e
+clean:
+	$(MAKE) -C backend clean
+	cd frontend && rm -rf node_modules .svelte-kit

@@ -1,4 +1,5 @@
-execution.md
+# Python: standard .gitignore
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -6,7 +7,7 @@ __pycache__/
 
 # C extensions
 *.so
-
+docs/*
 # Distribution / packaging
 .Python
 build/
@@ -15,18 +16,25 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
+pip-wheel-metadata/
+wheelhouse/
+
+# Virtual environments
+venv/
+ENV/
+env/
+.env/
+.venv/
+env.bak/
+venv.bak/
 
 # PyInstaller
 *.manifest
@@ -43,87 +51,60 @@ htmlcov/
 .coverage
 .coverage.*
 .cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
 .pytest_cache/
 
 # Translations
 *.mo
 *.pot
 
-# Django stuff:
+# Django / common local files
 *.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
-
-# Flask stuff:
 instance/
-.webassets-cache
 
-# Scrapy stuff:
-.scrapy
-data/*
-# Sphinx documentation
+# Sphinx / docs build
 docs/_build/
+.build/
+.docs/
 
-# PyBuilder
-target/
+# Type checkers / caches
+.pyre/
+.mypy_cache/
+.dmypy.json
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*~
 
-# IPython
-profile_default/
-ipython_config.py
+# OS files
+.DS_Store
+Thumbs.db
+
+# dotenv
+.env
+.env.*
 
 # pyenv
 .python-version
 
-# pipenv
-Pipfile.lock
-
-# PEP 582
-__pypackages__/
-
-# Celery stuff
+# Celery
 celerybeat-schedule
 celerybeat.pid
 
-# SageMath parsed files
-*.sage.py
+# Coverage / test reports
+coverage.xml
+nosetests.xml
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# Jupyter
+.ipynb_checkpoints
 
-# Spyder project settings
-.spyderproject
-.spyproject
+# Custom: ignore .antigravitycli folder
+.antigravitycli/
 
-# Rope project settings
-.ropeproject
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Project specific
-.mypy_cache/
-.dmypy.json
-dmypy.json
+data/*

@@ -106,3 +106,5 @@ nosetests.xml
 
 # Custom: ignore .antigravitycli folder
 .antigravitycli/
+
+data/*

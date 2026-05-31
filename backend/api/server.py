@@ -8,6 +8,7 @@ from api.routes.auth import router as auth_router
 from api.routes.health import router as health_router
 from api.routes.teams import router as teams_router
 from api.routes.teams import users_router
+from api.routes.ingest import router as ingest_router
 
 
 def create_app() -> FastAPI:
@@ -41,5 +42,6 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(teams_router)
     app.include_router(users_router)
+    app.include_router(ingest_router)
 
     return app

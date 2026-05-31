@@ -64,4 +64,3 @@ def verify_token(token: str) -> dict[str, Any] | None:
         return payload
     except JWTError:
         return None
-

@@ -43,4 +43,3 @@ def test_verify_empty_password():
 def test_verify_malformed_hash_returns_false():
     assert verify_password("password", "invalid-hash-string") is False
     assert verify_password("password", "") is False
-

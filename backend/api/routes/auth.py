@@ -2,6 +2,7 @@
 """Authentication routes: login, refresh, and me."""
 
 import sqlite3
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 

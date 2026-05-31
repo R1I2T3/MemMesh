@@ -1,7 +1,6 @@
 # backend/tests/test_jwt.py
 """Unit tests for JWT token creation and verification."""
 
-import time
 from auth.jwt import create_access_token, verify_token
 
 

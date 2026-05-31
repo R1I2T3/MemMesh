@@ -37,6 +37,7 @@ def load_settings() -> Settings:
     jwt_secret = os.getenv("JWT_SECRET", "")
     if not jwt_secret or jwt_secret == "change-this-secret-in-production":
         import warnings
+
         warnings.warn(
             "JWT_SECRET is not set or using default value. "
             "Set a strong secret in .env for production.",
@@ -48,6 +49,7 @@ def load_settings() -> Settings:
     admin_password = os.getenv("ADMIN_PASSWORD", "changeme")
     if admin_password == "changeme":
         import warnings
+
         warnings.warn(
             "ADMIN_PASSWORD is set to the default value 'changeme'. "
             "Set a secure password in .env for production.",

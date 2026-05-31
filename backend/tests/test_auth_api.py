@@ -149,6 +149,7 @@ def test_refresh_token_fails_after_user_deletion(client):
 
     # Delete the user from the database
     from db.sqlite import get_connection
+
     conn = get_connection()
     try:
         with conn:
@@ -166,5 +167,5 @@ def test_refresh_token_fails_after_user_deletion(client):
 
     # Re-run seeder to restore database clean state for downstream tests
     from db.sqlite import seed_admin
-    seed_admin()
 
+    seed_admin()

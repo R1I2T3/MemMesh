@@ -18,6 +18,7 @@ def create_app() -> FastAPI:
 
     # CORS — allow frontend dev server and dynamic environments
     import os
+
     allowed_origins = [
         origin.strip()
         for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")

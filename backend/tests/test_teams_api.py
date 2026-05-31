@@ -266,8 +266,8 @@ def test_add_member_nonexistent_user_fails(client, admin_headers):
     assert resp.json()["detail"] == "User not found"
 
 
-def test_add_member_duplicate_fails(client, admin_headers):
-    """Verify adding a duplicate member returns 400 'User already in team'."""
+def test_add_member_duplicate_ok(client, admin_headers):
+    """Verify adding a duplicate member returns 201 (upsert is supported)."""
     team_resp = client.post(
         "/admin/teams",
         json={"name": "Engineering Team"},
@@ -284,14 +284,14 @@ def test_add_member_duplicate_fails(client, admin_headers):
     )
     assert resp1.status_code == 201
 
-    # Add second time
+    # Add second time (same role)
     resp2 = client.post(
         f"/admin/teams/{team_id}/members",
         json={"user_id": "user-id-1", "role": "user"},
         headers=admin_headers,
     )
-    assert resp2.status_code == 400
-    assert resp2.json()["detail"] == "User already in team"
+    assert resp2.status_code == 201
+    assert resp2.json()["role"] == "user"
 
 
 def test_add_member_invalid_role_fails(client, admin_headers):
@@ -439,3 +439,86 @@ def test_member_endpoints_reject_unauthorized(client, user_headers):
     
     resp_del_user = client.delete("/admin/teams/some-team/members/user-id", headers=user_headers)
     assert resp_del_user.status_code == 403
+
+
+def test_list_users_success(client, admin_headers):
+    """Verify that an admin can successfully list all users in the system."""
+    create_test_user("user-id-1", "user1@test.com")
+    create_test_user("user-id-2", "user2@test.com")
+
+    response = client.get("/admin/users", headers=admin_headers)
+    assert response.status_code == 200
+    data = response.json()
+    
+    # We should have admin, user1, user2, plus the admin-user-123 created in fixture
+    assert len(data) >= 3
+    emails = {user["email"] for user in data}
+    assert "user1@test.com" in emails
+    assert "user2@test.com" in emails
+    
+    # Verify field structure
+    user1 = next(u for u in data if u["user_id"] == "user-id-1")
+    assert user1["email"] == "user1@test.com"
+    assert user1["global_role"] == "user"
+    assert "created_at" in user1
+
+
+def test_list_users_superadmin_success(client, superadmin_headers):
+    """Verify that a superadmin can successfully list all users in the system."""
+    response = client.get("/admin/users", headers=superadmin_headers)
+    assert response.status_code == 200
+
+
+def test_list_users_reject_unauthenticated(client):
+    """Verify that listing users rejects unauthenticated requests with 401."""
+    response = client.get("/admin/users")
+    assert response.status_code == 401
+
+
+def test_list_users_reject_non_admin(client, user_headers):
+    """Verify that listing users rejects non-admin users with 403."""
+    response = client.get("/admin/users", headers=user_headers)
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Insufficient permissions"
+
+
+def test_add_member_upsert_role(client, admin_headers):
+    """Verify that adding an existing member again with a different role updates their role (upsert)."""
+    # 1. Create team
+    team_resp = client.post(
+        "/admin/teams",
+        json={"name": "Engineering Team"},
+        headers=admin_headers,
+    )
+    assert team_resp.status_code == 201
+    team_id = team_resp.json()["team_id"]
+
+    # 2. Create user
+    create_test_user("user-id-upsert", "upsert@test.com")
+
+    # 3. Add as user
+    resp1 = client.post(
+        f"/admin/teams/{team_id}/members",
+        json={"user_id": "user-id-upsert", "role": "user"},
+        headers=admin_headers,
+    )
+    assert resp1.status_code == 201
+    assert resp1.json()["role"] == "user"
+
+    # 4. Upsert/Promote to lead
+    resp2 = client.post(
+        f"/admin/teams/{team_id}/members",
+        json={"user_id": "user-id-upsert", "role": "lead"},
+        headers=admin_headers,
+    )
+    assert resp2.status_code == 201
+    assert resp2.json()["role"] == "lead"
+
+    # 5. Check in list
+    list_resp = client.get(f"/admin/teams/{team_id}/members", headers=admin_headers)
+    assert list_resp.status_code == 200
+    members = list_resp.json()
+    assert len(members) == 1
+    assert members[0]["user_id"] == "user-id-upsert"
+    assert members[0]["role"] == "lead"
+

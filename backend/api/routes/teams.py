@@ -149,13 +149,17 @@ async def add_team_member(
     try:
         with conn:
             conn.execute(
-                "INSERT INTO team_members (membership_id, user_id, team_id, role, added_by) VALUES (?, ?, ?, ?, ?)",
+                """
+                INSERT INTO team_members (membership_id, user_id, team_id, role, added_by)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, team_id) DO UPDATE SET role = excluded.role
+                """,
                 (membership_id, body.user_id, team_id, body.role, current_user["user_id"]),
             )
     except sqlite3.IntegrityError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User already in team",
+            detail="Database integrity error adding team member",
         )
 
     return MemberResponse(
@@ -218,3 +222,37 @@ async def remove_team_member(
                 detail="Member not found",
             )
     return
+
+
+# --- Users Router ---
+
+users_router = APIRouter(
+    prefix="/admin/users",
+    tags=["admin-users"],
+    dependencies=[Depends(require_global_role(["superadmin", "admin"]))],
+)
+
+
+class UserListResponse(BaseModel):
+    user_id: str
+    email: str
+    global_role: str
+    created_at: str
+
+
+@users_router.get("", response_model=list[UserListResponse])
+async def list_users(conn: sqlite3.Connection = Depends(get_db)):
+    """List all users in the system (Admin/Superadmin only)."""
+    rows = conn.execute(
+        "SELECT user_id, email, global_role, created_at FROM users ORDER BY created_at DESC"
+    ).fetchall()
+    return [
+        UserListResponse(
+            user_id=row["user_id"],
+            email=row["email"],
+            global_role=row["global_role"],
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+

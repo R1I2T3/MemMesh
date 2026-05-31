@@ -66,11 +66,16 @@ async def login(body: LoginRequest, conn: sqlite3.Connection = Depends(get_db)):
     # Fetch team memberships if any exist (future-proofing)
     try:
         members = conn.execute(
-            "SELECT team_id, role FROM team_members WHERE user_id = ?",
+            """
+            SELECT tm.team_id, tm.role, t.name
+            FROM team_members tm
+            JOIN teams t ON tm.team_id = t.team_id
+            WHERE tm.user_id = ?
+            """,
             (row["user_id"],),
         ).fetchall()
         team_memberships = [
-            {"team_id": m["team_id"], "role": m["role"]} for m in members
+            {"team_id": m["team_id"], "role": m["role"], "name": m["name"]} for m in members
         ]
     except sqlite3.OperationalError as e:
         # team_members table may not exist yet in Phase 1
@@ -125,11 +130,16 @@ async def refresh(body: RefreshRequest, conn: sqlite3.Connection = Depends(get_d
     team_memberships: list[dict[str, str]] = []
     try:
         members = conn.execute(
-            "SELECT team_id, role FROM team_members WHERE user_id = ?",
+            """
+            SELECT tm.team_id, tm.role, t.name
+            FROM team_members tm
+            JOIN teams t ON tm.team_id = t.team_id
+            WHERE tm.user_id = ?
+            """,
             (row["user_id"],),
         ).fetchall()
         team_memberships = [
-            {"team_id": m["team_id"], "role": m["role"]} for m in members
+            {"team_id": m["team_id"], "role": m["role"], "name": m["name"]} for m in members
         ]
     except sqlite3.OperationalError as e:
         if "no such table: team_members" not in str(e):

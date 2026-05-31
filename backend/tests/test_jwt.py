@@ -38,8 +38,11 @@ def test_verify_tampered_token_returns_none():
         global_role="user",
         team_memberships=[],
     )
-    # Tamper with the token by changing a character
-    tampered = token[:-1] + ("a" if token[-1] != "a" else "b")
+    # Tamper with the token by changing the first character of the signature
+    parts = token.split(".")
+    sig = parts[2]
+    tampered_sig = ("a" if sig[0] != "a" else "b") + sig[1:]
+    tampered = f"{parts[0]}.{parts[1]}.{tampered_sig}"
     payload = verify_token(tampered)
     assert payload is None
 

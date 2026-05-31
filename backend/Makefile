@@ -4,6 +4,9 @@ PIP := $(VENV)/bin/pip
 PYTEST := $(VENV)/bin/pytest
 UVICORN := $(VENV)/bin/uvicorn
 
+-include .env
+export
+
 .PHONY: check-deps install setup migrate seed-admin run run-bg stop test lint format clean reset-db
 
 check-deps:
@@ -38,8 +41,7 @@ run:
 	$(UVICORN) main:app --host $${API_HOST:-127.0.0.1} --port $${API_PORT:-8000} --reload
 
 run-bg:
-	$(UVICORN) main:app --host $${API_HOST:-127.0.0.1} --port $${API_PORT:-8000} &
-	@echo $$! > .pid
+	$(UVICORN) main:app --host $${API_HOST:-127.0.0.1} --port $${API_PORT:-8000} > uvicorn.log 2>&1 & echo $$! > .pid
 	@echo "Server started (PID: $$(cat .pid))"
 
 stop:
@@ -63,7 +65,7 @@ format:
 	$(VENV)/bin/isort .
 
 clean:
-	rm -rf $(VENV) data __pycache__ .pid .pytest_cache
+	rm -rf $(VENV) data __pycache__ .pid .pytest_cache uvicorn.log
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
 reset-db:

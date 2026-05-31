@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes.auth import router as auth_router
 from api.routes.health import router as health_router
+from api.routes.teams import router as teams_router
 
 
 def create_app() -> FastAPI:
@@ -35,5 +36,6 @@ def create_app() -> FastAPI:
     # Register routes
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(teams_router)
 
     return app

@@ -3,6 +3,24 @@
   import { authStore } from '$lib/auth';
   import { appState } from '$lib/appState.svelte';
   import Header from '$lib/components/Header.svelte';
+  import UploadZone from './upload-zone.svelte';
+  import DocList from './doc-list.svelte';
+  import DocPreview from './doc-preview.svelte';
+
+  // Selected document state
+  let selectedDoc = $state<any | null>(null);
+
+  // Refresh trigger — increment to tell doc-list to re-fetch
+  let refreshTrigger = $state(0);
+
+  function handleDocSelect(event: CustomEvent) {
+    selectedDoc = event.detail;
+  }
+
+  function handleUploaded(event: CustomEvent) {
+    // Increment to trigger doc-list refresh
+    refreshTrigger += 1;
+  }
 </script>
 
 <svelte:head>
@@ -14,6 +32,7 @@
   <Header />
 
   <main class="dashboard-content">
+    <!-- ===== Welcome Card ===== -->
     <div class="welcome-card glass-panel">
       <div class="welcome-header">
         <h1>Welcome to MemMesh</h1>
@@ -26,7 +45,7 @@
           <span class="card-icon">👥</span>
           <h2>Active Team Context</h2>
         </div>
-        
+
         {#if appState.activeTeam}
           <div class="team-details">
             <div class="detail-row">
@@ -66,10 +85,57 @@
         </div>
       </div>
     </div>
+
+    <!-- ===== Document Explorer Section ===== -->
+    {#if appState.activeTeam}
+      <section class="doc-explorer-section" aria-label="Document Explorer">
+        <div class="section-header">
+          <div class="section-title-group">
+            <span class="section-icon" aria-hidden="true">🗄️</span>
+            <h2 class="section-title">Document Explorer</h2>
+          </div>
+          <p class="section-subtitle">
+            Browse, preview, and manage your team's knowledge base documents.
+          </p>
+        </div>
+
+        <!-- Upload Zone — only for leads -->
+        {#if appState.activeTeam.role === 'lead'}
+          <div class="upload-section">
+            <UploadZone
+              teamId={appState.activeTeam.team_id}
+              userRole={appState.activeTeam.role}
+              on:uploaded={handleUploaded}
+            />
+          </div>
+        {/if}
+
+        <!-- Split-pane document explorer -->
+        <div class="split-pane">
+          <div class="pane pane-left">
+            <DocList
+              teamId={appState.activeTeam.team_id}
+              refreshTrigger={refreshTrigger}
+              on:select={handleDocSelect}
+            />
+          </div>
+          <div class="pane pane-right">
+            <DocPreview doc={selectedDoc} />
+          </div>
+        </div>
+      </section>
+    {:else}
+      <div class="no-team-explorer glass-panel">
+        <div class="no-team-icon" aria-hidden="true">🗄️</div>
+        <h2>No Active Team</h2>
+        <p>Select a team using the Team Switcher above to access the document explorer.</p>
+      </div>
+    {/if}
   </main>
 </div>
 
 <style>
+  /* ===== Layout ===== */
   .dashboard {
     min-height: 100vh;
     background: var(--bg);
@@ -77,10 +143,14 @@
 
   .dashboard-content {
     padding: var(--space-2xl) var(--space-md);
-    max-width: 800px;
+    max-width: 1400px;
     margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xl);
   }
 
+  /* ===== Glass Panel ===== */
   .glass-panel {
     background: rgba(26, 26, 31, 0.4);
     border: 1px solid var(--border);
@@ -92,6 +162,7 @@
     animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  /* ===== Welcome Card ===== */
   .welcome-header h1 {
     font-size: var(--text-3xl);
     font-weight: 700;
@@ -214,6 +285,11 @@
     background: var(--surface);
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
+    transition: border-color var(--transition-fast);
+  }
+
+  .info-item:hover {
+    border-color: rgba(245, 166, 35, 0.3);
   }
 
   .info-label {
@@ -239,8 +315,161 @@
     font-weight: 600;
   }
 
+  /* ===== Document Explorer Section ===== */
+  .doc-explorer-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+  }
+
+  .section-title-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .section-icon {
+    font-size: var(--text-2xl);
+  }
+
+  .section-title {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  .section-subtitle {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    align-self: center;
+    max-width: 340px;
+    text-align: right;
+  }
+
+  /* Upload section */
+  .upload-section {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  /* ===== Split Pane ===== */
+  .split-pane {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: var(--space-lg);
+    min-height: 560px;
+  }
+
+  .pane {
+    height: 560px;
+    position: relative;
+  }
+
+  /* ===== No team explorer ===== */
+  .no-team-explorer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    padding: var(--space-2xl);
+    text-align: center;
+    min-height: 200px;
+  }
+
+  .no-team-icon {
+    font-size: 3rem;
+    opacity: 0.5;
+  }
+
+  .no-team-explorer h2 {
+    font-size: var(--text-xl);
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .no-team-explorer p {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    opacity: 0.7;
+    max-width: 300px;
+  }
+
+  /* ===== Animations ===== */
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ===== Responsive ===== */
+
+  /* Tablet: stacked layout with preview as a drawer-like element */
+  @media (max-width: 900px) {
+    .split-pane {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto;
+      min-height: auto;
+    }
+
+    .pane {
+      height: 400px;
+    }
+
+    .pane-left {
+      height: 340px;
+    }
+
+    .section-subtitle {
+      text-align: left;
+    }
+  }
+
+  /* Mobile: full-width stacked, preview below list */
+  @media (max-width: 600px) {
+    .dashboard-content {
+      padding: var(--space-lg) var(--space-sm);
+      gap: var(--space-lg);
+    }
+
+    .glass-panel {
+      padding: var(--space-lg);
+    }
+
+    .split-pane {
+      gap: var(--space-md);
+    }
+
+    .pane {
+      height: 320px;
+    }
+
+    .pane-left {
+      height: 280px;
+    }
+
+    .section-header {
+      flex-direction: column;
+    }
+
+    .section-subtitle {
+      text-align: left;
+    }
+
+    .section-title {
+      font-size: var(--text-xl);
+    }
+
+    .welcome-header h1 {
+      font-size: var(--text-2xl);
+    }
   }
 </style>

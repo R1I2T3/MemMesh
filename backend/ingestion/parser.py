@@ -1,12 +1,13 @@
 """Multi-format document parser backed by Docling.
 
 Supports: TXT, MD, HTML, PDF, DOCX, PPTX, XLSX, and images (via OCR).
-Returns extracted, cleaned text from any supported document format.
+Returns extracted, cleaned text and a DoclingDocument from any supported format.
 """
 
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -17,6 +18,8 @@ class ParseResult:
     format: str
     page_count: int = 1
     headings: list[str] = field(default_factory=list)
+    # DoclingDocument object — present for all formats, enables HybridChunker
+    doc: Any | None = None
 
 
 # Formats natively handled by Docling's DocumentConverter
@@ -26,95 +29,125 @@ _DOCLING_FORMATS = {
     "png", "jpg", "jpeg", "tiff", "bmp", "gif", "webp",
 }
 
-# Plain-text formats we handle ourselves (Docling adds no value here)
+# Plain-text formats we convert via convert_string so HybridChunker can be used
 _PLAINTEXT_FORMATS = {"txt", "md"}
 
 
 def _clean_text(text: str) -> str:
     """Clean extracted text: deduplicate whitespace, strip edges."""
-    # Normalize Windows-style line endings to Unix-style
     text = text.replace("\r\n", "\n")
-    # Strip trailing whitespace of each line
     text = re.sub(r"[^\S\r\n]+$", "", text, flags=re.MULTILINE)
-    # Collapse multiple horizontal spaces inside lines to a single space
     text = re.sub(r"(?<=\S)[^\S\r\n]+", " ", text)
-    # Collapse 3+ newlines into 2
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
 
+def _headings_from_doc(doc: Any) -> list[str]:
+    """Extract headings from a DoclingDocument.
+
+    Docling maps H1 to TitleItem and H2+ to SectionHeaderItem.
+    We collect both in document order so the full heading hierarchy is preserved.
+    """
+    headings: list[str] = []
+    try:
+        from docling_core.types.doc import SectionHeaderItem, TitleItem
+        for item, _ in doc.iterate_items():
+            if isinstance(item, (TitleItem, SectionHeaderItem)):
+                headings.append(item.text)
+    except Exception:
+        pass
+    return headings
+
+
+def _page_count_from_doc(doc: Any) -> int:
+    """Extract page count from a DoclingDocument."""
+    try:
+        if doc.pages:
+            return len(doc.pages)
+    except Exception:
+        pass
+    return 1
+
+
+def _convert_string_to_doc(text: str, fmt: str) -> Any | None:
+    """Convert a plain text/markdown string into a DoclingDocument via convert_string."""
+    try:
+        from docling.document_converter import DocumentConverter
+        from docling.datamodel.base_models import InputFormat
+
+        input_fmt = InputFormat.MD  # Both txt and md render cleanly as markdown
+        converter = DocumentConverter()
+        result = converter.convert_string(text, format=input_fmt, name=f"document.{fmt}")
+        return result.document
+    except Exception:
+        return None
+
+
 def _parse_txt(path: Path) -> ParseResult:
     text = path.read_text(encoding="utf-8", errors="replace")
-    return ParseResult(text=_clean_text(text), format="txt")
+    cleaned = _clean_text(text)
+    doc = _convert_string_to_doc(cleaned, "txt")
+    return ParseResult(text=cleaned, format="txt", doc=doc)
 
 
 def _parse_md(path: Path) -> ParseResult:
     text = path.read_text(encoding="utf-8", errors="replace")
-    # Remove code blocks before extracting headings to avoid matching code comments
+    cleaned = _clean_text(text)
+    doc = _convert_string_to_doc(cleaned, "md")
+
+    # Extract headings from markdown source (remove code blocks first)
     text_no_code = re.sub(r"```[\s\S]*?```", "", text)
     headings = re.findall(r"^#+\s+(.+)$", text_no_code, re.MULTILINE)
-    # Strip any trailing hashes (e.g. ## Heading ##), preserving C#
     headings = [re.sub(r"\s+#+$", "", h).strip() for h in headings]
-    return ParseResult(text=_clean_text(text), format="md", headings=headings)
+
+    # Prefer doc-derived headings if available
+    if doc:
+        doc_headings = _headings_from_doc(doc)
+        if doc_headings:
+            headings = doc_headings
+
+    return ParseResult(text=cleaned, format="md", headings=headings, doc=doc)
 
 
 def _parse_with_docling(path: Path) -> ParseResult:
     """Use Docling's DocumentConverter to parse the file."""
     from docling.document_converter import DocumentConverter
-    from docling.datamodel.base_models import InputFormat
-    from docling.document_converter import (
-        PdfFormatOption,
-        WordFormatOption,
-        SimplePipeline,
-    )
 
     converter = DocumentConverter()
     result = converter.convert(str(path))
     doc = result.document
 
-    # Export to plain markdown — preserves structure and is clean text
     markdown = doc.export_to_markdown()
     text = _clean_text(markdown)
 
-    # Extract headings: docling marks section headers in the document model
-    headings: list[str] = []
-    try:
-        from docling_core.types.doc import SectionHeaderItem
-        for item, _ in doc.iterate_items():
-            if isinstance(item, SectionHeaderItem):
-                headings.append(item.text)
-    except Exception:
+    headings = _headings_from_doc(doc)
+    if not headings:
         # Fallback: parse headings from the exported markdown
         headings = re.findall(r"^#+\s+(.+)$", markdown, re.MULTILINE)
         headings = [re.sub(r"\s+#+$", "", h).strip() for h in headings]
 
-    # Page count: inspect doc.pages if available
-    page_count = 1
-    try:
-        if doc.pages:
-            page_count = len(doc.pages)
-    except Exception:
-        pass
+    page_count = _page_count_from_doc(doc)
 
     ext = path.suffix.lstrip(".").lower()
-    # Normalise htm -> html for consistency
     fmt = "html" if ext == "htm" else ext
     return ParseResult(
         text=text,
         format=fmt,
         page_count=page_count,
         headings=headings,
+        doc=doc,
     )
 
 
 def parse_document(path: str) -> ParseResult:
-    """Parse a document file and return extracted text.
+    """Parse a document file and return extracted text and DoclingDocument.
 
     Args:
         path: Absolute or relative path to the document file.
 
     Returns:
-        ParseResult with cleaned text, format, page count, and headings.
+        ParseResult with cleaned text, format, page count, headings,
+        and a DoclingDocument (``doc``) for use with HybridChunker.
 
     Raises:
         ValueError: If the file format is not supported or if the path is a directory.

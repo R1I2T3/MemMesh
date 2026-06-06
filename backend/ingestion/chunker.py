@@ -1,13 +1,15 @@
 # backend/ingestion/chunker.py
-"""Recursive character text chunker with metadata.
+"""Structure-aware text chunker powered by Docling's HybridChunker.
 
-Splits text into overlapping chunks of configurable size.
-Each chunk carries team_id, source_doc_id, page_number, section_heading, and char_offset.
+Chunks a DoclingDocument (or falls back to plain text) into overlapping
+segments with rich metadata: team_id, source_doc_id, page_number,
+section_heading, char_offset, and a deterministic chunk_id.
 """
 
 import hashlib
 import re
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -24,14 +26,84 @@ class Chunk:
     section_heading: str | None
 
 
-# Separators ordered by preference: paragraph, sentence, word, character
-_SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
-
-
 def _generate_chunk_id(team_id: str, source_doc_id: str, index: int) -> str:
     """Generate a deterministic chunk ID based on team, doc, and index."""
     raw = f"{team_id}:{source_doc_id}:{index}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+# ---------------------------------------------------------------------------
+# Docling HybridChunker path
+# ---------------------------------------------------------------------------
+
+def _chunk_with_hybrid(
+    doc: Any,
+    text: str,
+    team_id: str,
+    source_doc_id: str,
+    max_tokens: int,
+) -> list[Chunk]:
+    """Use Docling HybridChunker to produce structure-aware chunks."""
+    from docling.chunking import HybridChunker
+
+    chunker = HybridChunker(
+        tokenizer="sentence-transformers/all-MiniLM-L6-v2",
+        max_tokens=max_tokens,
+        merge_peers=True,
+    )
+
+    raw_chunks = list(chunker.chunk(doc))
+    chunks: list[Chunk] = []
+
+    for i, raw in enumerate(raw_chunks):
+        chunk_text_str = chunker.serialize(raw)
+        if not chunk_text_str.strip():
+            continue
+
+        # Page number — take the first page mentioned in provenance
+        page_number = 1
+        try:
+            prov = raw.meta.doc_items[0].prov
+            if prov:
+                page_number = prov[0].page_no
+        except Exception:
+            pass
+
+        # Section heading — from the chunk's headings list
+        section_heading: str | None = None
+        try:
+            headings = raw.meta.headings
+            if headings:
+                section_heading = headings[-1]
+        except Exception:
+            pass
+
+        # char_offset — locate the chunk text in the full document text
+        char_offset = text.find(chunk_text_str[:40])
+        if char_offset < 0:
+            char_offset = 0
+
+        chunks.append(
+            Chunk(
+                chunk_id=_generate_chunk_id(team_id, source_doc_id, i),
+                text=chunk_text_str,
+                team_id=team_id,
+                source_doc_id=source_doc_id,
+                index=i,
+                char_offset=char_offset,
+                page_number=page_number,
+                section_heading=section_heading,
+            )
+        )
+
+    return chunks
+
+
+# ---------------------------------------------------------------------------
+# Plain-text fallback (recursive character splitter)
+# ---------------------------------------------------------------------------
+
+_SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
 
 
 def _split_text_recursive(
@@ -50,21 +122,14 @@ def _split_text_recursive(
     if len(text) <= chunk_size:
         return [(text, 0)] if text.strip() else []
 
-    # Find the best separator that exists in the text
     separator = ""
     for sep in separators:
         if sep == "" or sep in text:
             separator = sep
             break
 
-    # Split by the chosen separator
-    if separator:
-        parts = text.split(separator)
-    else:
-        # Character-level split as last resort
-        parts = list(text)
+    parts = text.split(separator) if separator else list(text)
 
-    # Merge parts into chunks respecting chunk_size
     chunks: list[tuple[str, int]] = []
     current_chunk = ""
     current_offset = 0
@@ -79,11 +144,8 @@ def _split_text_recursive(
         elif len(current_chunk) + len(piece) <= chunk_size:
             current_chunk += piece
         else:
-            # Emit current chunk
             if current_chunk.strip():
                 chunks.append((current_chunk.strip(), current_offset))
-
-            # Start new chunk with overlap
             if chunk_overlap > 0 and len(current_chunk) > chunk_overlap:
                 overlap_text = current_chunk[-chunk_overlap:]
                 current_chunk = overlap_text + piece
@@ -94,7 +156,6 @@ def _split_text_recursive(
 
         running_offset += len(piece)
 
-    # Don't forget the last chunk
     if current_chunk.strip():
         chunks.append((current_chunk.strip(), current_offset))
 
@@ -108,11 +169,43 @@ def _detect_page_number(text: str, char_offset: int) -> int:
 
 
 def _detect_section_heading(text: str, char_offset: int) -> str | None:
-    """Find the most recent heading (markdown-style) before the chunk offset."""
+    """Find the most recent markdown heading before the chunk offset."""
     prefix = text[:char_offset]
     headings = re.findall(r"^#+\s+(.+)$", prefix, re.MULTILINE)
     return headings[-1] if headings else None
 
+
+def _chunk_with_character_splitter(
+    text: str,
+    team_id: str,
+    source_doc_id: str,
+    chunk_size: int,
+    chunk_overlap: int,
+) -> list[Chunk]:
+    """Fallback: character-based recursive splitter."""
+    raw_chunks = _split_text_recursive(text, chunk_size, chunk_overlap)
+    chunks: list[Chunk] = []
+
+    for i, (chunk_text_str, char_offset) in enumerate(raw_chunks):
+        chunks.append(
+            Chunk(
+                chunk_id=_generate_chunk_id(team_id, source_doc_id, i),
+                text=chunk_text_str,
+                team_id=team_id,
+                source_doc_id=source_doc_id,
+                index=i,
+                char_offset=char_offset,
+                page_number=_detect_page_number(text, char_offset),
+                section_heading=_detect_section_heading(text, char_offset),
+            )
+        )
+
+    return chunks
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def chunk_text(
     text: str,
@@ -120,15 +213,23 @@ def chunk_text(
     source_doc_id: str,
     chunk_size: int = 512,
     chunk_overlap: int = 64,
+    doc: Any | None = None,
 ) -> list[Chunk]:
-    """Split text into overlapping chunks with metadata.
+    """Split text into chunks with metadata.
+
+    Uses Docling's HybridChunker when a DoclingDocument is provided (``doc``),
+    giving structure-aware, token-counted splits. Falls back to a recursive
+    character splitter when ``doc`` is None.
 
     Args:
-        text: The full document text to chunk.
+        text: The full document text (used as fallback and for char_offset lookup).
         team_id: Team that owns this document.
         source_doc_id: ID of the source document.
-        chunk_size: Maximum characters per chunk (default 512).
-        chunk_overlap: Character overlap between consecutive chunks (default 64).
+        chunk_size: Maximum characters per chunk for the fallback splitter (default 512).
+            When HybridChunker is used this maps to ``max_tokens``.
+        chunk_overlap: Character overlap for the fallback splitter (default 64).
+        doc: Optional DoclingDocument from ``parse_document()``. When present,
+            HybridChunker is used instead of the character splitter.
 
     Returns:
         List of Chunk objects with metadata.
@@ -136,25 +237,11 @@ def chunk_text(
     if not text.strip():
         return []
 
-    raw_chunks = _split_text_recursive(text, chunk_size, chunk_overlap)
+    if doc is not None:
+        try:
+            return _chunk_with_hybrid(doc, text, team_id, source_doc_id, max_tokens=chunk_size)
+        except Exception:
+            # If HybridChunker fails for any reason, fall through to character splitter
+            pass
 
-    chunks = []
-    for i, (chunk_text_str, char_offset) in enumerate(raw_chunks):
-        chunk_id = _generate_chunk_id(team_id, source_doc_id, i)
-        page_number = _detect_page_number(text, char_offset)
-        section_heading = _detect_section_heading(text, char_offset)
-
-        chunks.append(
-            Chunk(
-                chunk_id=chunk_id,
-                text=chunk_text_str,
-                team_id=team_id,
-                source_doc_id=source_doc_id,
-                index=i,
-                char_offset=char_offset,
-                page_number=page_number,
-                section_heading=section_heading,
-            )
-        )
-
-    return chunks
+    return _chunk_with_character_splitter(text, team_id, source_doc_id, chunk_size, chunk_overlap)

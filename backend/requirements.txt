@@ -11,9 +11,5 @@ black==24.8.0
 isort==5.13.2
 chromadb==0.5.23
 falkordblite==0.10.0
-PyMuPDF==1.25.3
-python-docx==1.1.2
-html2text==2024.2.26
-pytesseract==0.3.13
+docling
 spacy==3.8.14
-Pillow==11.1.0

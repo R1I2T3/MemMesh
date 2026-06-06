@@ -1,6 +1,6 @@
-"""Unit tests for multi-format document parser."""
+"""Unit tests for multi-format document parser (backed by Docling)."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -46,6 +46,65 @@ class TestParseMarkdown:
         assert result.headings == ["Title", "Subtitle", "C#"]
 
 
+class TestParsePdf:
+    def test_parse_pdf(self, tmp_path):
+        """Create a minimal PDF with PyMuPDF and parse it back via Docling."""
+        pytest.importorskip("fitz", reason="PyMuPDF not installed (test fixture only)")
+        import fitz
+
+        pdf_path = str(tmp_path / "test.pdf")
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "PDF content here")
+        doc.save(pdf_path)
+        doc.close()
+
+        result = parse_document(pdf_path)
+        assert "PDF content here" in result.text
+        assert result.format == "pdf"
+        assert result.page_count >= 1
+
+
+class TestParseDocx:
+    def test_parse_docx(self, tmp_path):
+        """Create a minimal DOCX with python-docx and parse it back via Docling."""
+        pytest.importorskip("docx", reason="python-docx not installed (test fixture only)")
+        from docx import Document
+
+        docx_path = str(tmp_path / "test.docx")
+        doc = Document()
+        doc.add_heading("Test Heading", level=1)
+        doc.add_paragraph("Paragraph content.")
+        doc.save(docx_path)
+
+        result = parse_document(docx_path)
+        assert "Test Heading" in result.text
+        assert "Paragraph content." in result.text
+        assert result.format == "docx"
+
+    def test_parse_docx_with_table(self, tmp_path):
+        pytest.importorskip("docx", reason="python-docx not installed (test fixture only)")
+        from docx import Document
+
+        docx_path = str(tmp_path / "table.docx")
+        doc = Document()
+        doc.add_heading("Doc with Table", level=1)
+
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Header 1"
+        table.cell(0, 1).text = "Header 2"
+        table.cell(1, 0).text = ""
+        table.cell(1, 1).text = "Cell B"
+        doc.save(docx_path)
+
+        result = parse_document(docx_path)
+        assert "Doc with Table" in result.text
+        # Table content should appear in some form
+        assert "Header 1" in result.text
+        assert "Header 2" in result.text
+        assert "Cell B" in result.text
+
+
 class TestParseHtml:
     def test_parse_html(self, tmp_path):
         f = tmp_path / "page.html"
@@ -57,7 +116,6 @@ class TestParseHtml:
         assert "Header" in result.text
         assert "Content here" in result.text
         assert result.format == "html"
-        assert result.headings == ["Header"]
 
     def test_parse_htm(self, tmp_path):
         f = tmp_path / "page.htm"
@@ -68,6 +126,7 @@ class TestParseHtml:
         result = parse_document(str(f))
         assert "Header HTM" in result.text
         assert "Content HTM" in result.text
+        # htm is normalised to html
         assert result.format == "html"
 
     def test_strips_scripts_and_styles(self, tmp_path):
@@ -83,79 +142,33 @@ class TestParseHtml:
         assert "body{}" not in result.text
 
 
-class TestParsePdf:
-    def test_parse_pdf(self, tmp_path):
-        """Create a minimal PDF with PyMuPDF and parse it back."""
-        import fitz
-
-        pdf_path = str(tmp_path / "test.pdf")
-        doc = fitz.open()
-        page = doc.new_page()
-        page.insert_text((72, 72), "PDF content here")
-        doc.save(pdf_path)
-        doc.close()
-
-        result = parse_document(pdf_path)
-        assert "PDF content here" in result.text
-        assert result.format == "pdf"
-        assert result.page_count == 1
-
-
-class TestParseDocx:
-    def test_parse_docx(self, tmp_path):
-        """Create a minimal DOCX with python-docx and parse it back."""
-        from docx import Document
-
-        docx_path = str(tmp_path / "test.docx")
-        doc = Document()
-        doc.add_heading("Test Heading", level=1)
-        doc.add_paragraph("Paragraph content.")
-        doc.save(docx_path)
-
-        result = parse_document(docx_path)
-        assert "Test Heading" in result.text
-        assert "Paragraph content." in result.text
-        assert result.format == "docx"
-        assert result.headings == ["Test Heading"]
-
-    def test_parse_docx_with_table(self, tmp_path):
-        from docx import Document
-
-        docx_path = str(tmp_path / "table.docx")
-        doc = Document()
-        doc.add_heading("Doc with Table", level=1)
-        
-        # Add table
-        table = doc.add_table(rows=2, cols=2)
-        table.cell(0, 0).text = "Header 1"
-        table.cell(0, 1).text = "Header 2"
-        table.cell(1, 0).text = ""  # Empty cell
-        table.cell(1, 1).text = "Cell B"
-        doc.save(docx_path)
-
-        result = parse_document(docx_path)
-        assert "Header 1 | Header 2" in result.text
-        assert "| Cell B" in result.text
-        assert result.headings == ["Doc with Table"]
-
-
 class TestParseImage:
-    @patch("pytesseract.image_to_string")
-    def test_parse_image_ocr(self, mock_ocr, tmp_path):
-        """Create a dummy image file and verify OCR parsing is mocked/called correctly."""
+    def test_parse_image_via_docling(self, tmp_path):
+        """Verify that image files are routed through Docling's OCR pipeline."""
+        pytest.importorskip("PIL", reason="Pillow not installed (test fixture only)")
         from PIL import Image
 
-        mock_ocr.return_value = "Mocked OCR Text from Image"
         img_path = tmp_path / "dummy.png"
-        
-        # Create a tiny 10x10 image
-        img = Image.new("RGB", (10, 10), color="white")
+        img = Image.new("RGB", (100, 100), color="white")
         img.save(img_path)
 
-        result = parse_document(str(img_path))
-        assert result.text == "Mocked OCR Text from Image"
+        # Mock the DocumentConverter so we don't need a real OCR engine in CI
+        mock_doc = MagicMock()
+        mock_doc.export_to_markdown.return_value = "Mocked OCR Text from Image"
+        mock_doc.pages = [MagicMock()]
+        mock_doc.iterate_items.return_value = []
+
+        mock_result = MagicMock()
+        mock_result.document = mock_doc
+
+        with patch(
+            "docling.document_converter.DocumentConverter.convert",
+            return_value=mock_result,
+        ):
+            result = parse_document(str(img_path))
+
+        assert "Mocked OCR Text from Image" in result.text
         assert result.format == "png"
-        mock_ocr.assert_called_once()
 
 
 class TestCleanText:

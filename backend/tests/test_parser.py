@@ -16,6 +16,7 @@ class TestParseTxt:
         assert "Hello world." in result.text
         assert "Second line." in result.text
         assert result.format == "txt"
+        assert result.doc is not None, "ParseResult.doc must be set for HybridChunker to work"
 
     def test_parse_empty_text(self, tmp_path):
         f = tmp_path / "empty.txt"
@@ -44,6 +45,7 @@ class TestParseMarkdown:
         assert "bold" in result.text
         assert result.format == "md"
         assert result.headings == ["Title", "Subtitle", "C#"]
+        assert result.doc is not None, "ParseResult.doc must be set for HybridChunker to work"
 
 
 class TestParsePdf:
@@ -116,6 +118,7 @@ class TestParseHtml:
         assert "Header" in result.text
         assert "Content here" in result.text
         assert result.format == "html"
+        assert result.doc is not None, "ParseResult.doc must be set for HybridChunker to work"
 
     def test_parse_htm(self, tmp_path):
         f = tmp_path / "page.htm"

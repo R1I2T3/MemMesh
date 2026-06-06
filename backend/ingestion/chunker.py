@@ -7,9 +7,16 @@ section_heading, char_offset, and a deterministic chunk_id.
 """
 
 import hashlib
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# Probe length used to locate a chunk's position in the source text when
+# Docling provenance data is unavailable. Longer = fewer false matches.
+_CHAR_OFFSET_PROBE_LEN = 80
 
 
 @dataclass
@@ -36,24 +43,48 @@ def _generate_chunk_id(team_id: str, source_doc_id: str, index: int) -> str:
 # Docling HybridChunker path
 # ---------------------------------------------------------------------------
 
+def _char_offset_from_provenance(raw_chunk: Any) -> int | None:
+    """Try to read char_span start from Docling chunk provenance."""
+    try:
+        prov = raw_chunk.meta.doc_items[0].prov
+        if prov and hasattr(prov[0], "char_span"):
+            return prov[0].char_span.start
+    except Exception:
+        pass
+    return None
+
+
+def _find_offset_in_text(text: str, chunk_text_str: str) -> int:
+    """Find the position of chunk_text_str in text using a running search.
+
+    Uses a prefix probe of length _CHAR_OFFSET_PROBE_LEN to reduce false
+    matches. Returns 0 if not found.
+    """
+    probe = chunk_text_str[:_CHAR_OFFSET_PROBE_LEN]
+    pos = text.find(probe)
+    return max(pos, 0)
+
+
 def _chunk_with_hybrid(
     doc: Any,
     text: str,
     team_id: str,
     source_doc_id: str,
     max_tokens: int,
+    tokenizer: str,
 ) -> list[Chunk]:
     """Use Docling HybridChunker to produce structure-aware chunks."""
     from docling.chunking import HybridChunker
 
     chunker = HybridChunker(
-        tokenizer="sentence-transformers/all-MiniLM-L6-v2",
+        tokenizer=tokenizer,
         max_tokens=max_tokens,
         merge_peers=True,
     )
 
     raw_chunks = list(chunker.chunk(doc))
     chunks: list[Chunk] = []
+    search_start = 0  # Track running position to avoid repeated false matches
 
     for i, raw in enumerate(raw_chunks):
         chunk_text_str = chunker.serialize(raw)
@@ -67,7 +98,7 @@ def _chunk_with_hybrid(
             if prov:
                 page_number = prov[0].page_no
         except Exception:
-            pass
+            logger.debug("Could not read page_no for chunk %d", i, exc_info=True)
 
         # Section heading — from the chunk's headings list
         section_heading: str | None = None
@@ -76,12 +107,17 @@ def _chunk_with_hybrid(
             if headings:
                 section_heading = headings[-1]
         except Exception:
-            pass
+            logger.debug("Could not read headings for chunk %d", i, exc_info=True)
 
-        # char_offset — locate the chunk text in the full document text
-        char_offset = text.find(chunk_text_str[:40])
-        if char_offset < 0:
-            char_offset = 0
+        # char_offset — prefer Docling provenance, fall back to text search
+        char_offset = _char_offset_from_provenance(raw)
+        if char_offset is None:
+            # Search forward from where the last chunk was found to avoid
+            # false matches on repeated phrases
+            probe = chunk_text_str[:_CHAR_OFFSET_PROBE_LEN]
+            pos = text.find(probe, search_start)
+            char_offset = pos if pos >= 0 else search_start
+        search_start = char_offset + 1
 
         chunks.append(
             Chunk(
@@ -162,9 +198,14 @@ def _split_text_recursive(
     return chunks
 
 
-def _detect_page_number(text: str, char_offset: int) -> int:
-    """Detect page number by counting form-feed characters before the offset."""
-    prefix = text[:char_offset]
+def _detect_page_number(text: str, char_offset: int, chunk_length: int = 0) -> int:
+    """Detect page number by counting form-feed characters up to the chunk's end.
+
+    Uses ``char_offset + chunk_length`` (the end of the chunk) rather than just
+    the start, so chunks that cross a page break are attributed to the page on
+    which their content ends. This is more accurate for RAG retrieval.
+    """
+    prefix = text[:char_offset + chunk_length]
     return prefix.count("\f") + 1
 
 
@@ -195,7 +236,7 @@ def _chunk_with_character_splitter(
                 source_doc_id=source_doc_id,
                 index=i,
                 char_offset=char_offset,
-                page_number=_detect_page_number(text, char_offset),
+                page_number=_detect_page_number(text, char_offset, len(chunk_text_str)),
                 section_heading=_detect_section_heading(text, char_offset),
             )
         )
@@ -214,22 +255,25 @@ def chunk_text(
     chunk_size: int = 512,
     chunk_overlap: int = 64,
     doc: Any | None = None,
+    tokenizer: str | None = None,
 ) -> list[Chunk]:
     """Split text into chunks with metadata.
 
     Uses Docling's HybridChunker when a DoclingDocument is provided (``doc``),
     giving structure-aware, token-counted splits. Falls back to a recursive
-    character splitter when ``doc`` is None.
+    character splitter when ``doc`` is None or HybridChunker raises.
 
     Args:
         text: The full document text (used as fallback and for char_offset lookup).
         team_id: Team that owns this document.
         source_doc_id: ID of the source document.
-        chunk_size: Maximum characters per chunk for the fallback splitter (default 512).
-            When HybridChunker is used this maps to ``max_tokens``.
+        chunk_size: Max characters per chunk for the fallback splitter (default 512).
+            Maps to ``max_tokens`` when HybridChunker is used.
         chunk_overlap: Character overlap for the fallback splitter (default 64).
         doc: Optional DoclingDocument from ``parse_document()``. When present,
             HybridChunker is used instead of the character splitter.
+        tokenizer: HuggingFace tokenizer name for HybridChunker. Defaults to
+            ``config.settings.chunker_tokenizer`` (env var CHUNKER_TOKENIZER).
 
     Returns:
         List of Chunk objects with metadata.
@@ -238,10 +282,22 @@ def chunk_text(
         return []
 
     if doc is not None:
+        if tokenizer is None:
+            try:
+                from config import settings
+                tokenizer = settings.chunker_tokenizer
+            except Exception:
+                tokenizer = "sentence-transformers/all-MiniLM-L6-v2"
+                logger.debug("Could not read chunker_tokenizer from config; using default")
+
         try:
-            return _chunk_with_hybrid(doc, text, team_id, source_doc_id, max_tokens=chunk_size)
+            return _chunk_with_hybrid(doc, text, team_id, source_doc_id, max_tokens=chunk_size, tokenizer=tokenizer)
         except Exception:
-            # If HybridChunker fails for any reason, fall through to character splitter
-            pass
+            logger.warning(
+                "HybridChunker failed (tokenizer=%s); falling back to character splitter. "
+                "Check that the tokenizer model is available.",
+                tokenizer,
+                exc_info=True,
+            )
 
     return _chunk_with_character_splitter(text, team_id, source_doc_id, chunk_size, chunk_overlap)

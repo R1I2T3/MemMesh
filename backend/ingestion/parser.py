@@ -2,12 +2,17 @@
 
 Supports: TXT, MD, HTML, PDF, DOCX, PPTX, XLSX, and images (via OCR).
 Returns extracted, cleaned text and a DoclingDocument from any supported format.
+
+Note: page_count defaults to 1 for formats without real page metadata (txt, md).
 """
 
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -32,6 +37,20 @@ _DOCLING_FORMATS = {
 # Plain-text formats we convert via convert_string so HybridChunker can be used
 _PLAINTEXT_FORMATS = {"txt", "md"}
 
+# Module-level singleton — DocumentConverter loads ML pipelines at construction;
+# re-instantiating on every call is expensive. Lazily initialised on first use.
+_converter = None
+
+
+def _get_converter() -> Any:
+    """Return the cached DocumentConverter, creating it on first call."""
+    global _converter
+    if _converter is None:
+        from docling.document_converter import DocumentConverter
+        _converter = DocumentConverter()
+        logger.debug("DocumentConverter initialised")
+    return _converter
+
 
 def _clean_text(text: str) -> str:
     """Clean extracted text: deduplicate whitespace, strip edges."""
@@ -55,7 +74,7 @@ def _headings_from_doc(doc: Any) -> list[str]:
             if isinstance(item, (TitleItem, SectionHeaderItem)):
                 headings.append(item.text)
     except Exception:
-        pass
+        logger.debug("Could not extract headings from DoclingDocument", exc_info=True)
     return headings
 
 
@@ -65,21 +84,27 @@ def _page_count_from_doc(doc: Any) -> int:
         if doc.pages:
             return len(doc.pages)
     except Exception:
-        pass
+        logger.debug("Could not extract page count from DoclingDocument", exc_info=True)
     return 1
 
 
 def _convert_string_to_doc(text: str, fmt: str) -> Any | None:
-    """Convert a plain text/markdown string into a DoclingDocument via convert_string."""
-    try:
-        from docling.document_converter import DocumentConverter
-        from docling.datamodel.base_models import InputFormat
+    """Convert a plain text/markdown string into a DoclingDocument via convert_string.
 
-        input_fmt = InputFormat.MD  # Both txt and md render cleanly as markdown
-        converter = DocumentConverter()
-        result = converter.convert_string(text, format=input_fmt, name=f"document.{fmt}")
+    Both txt and md are treated as Markdown (InputFormat.MD) since txt renders
+    cleanly as plain paragraphs and md is natively Markdown.
+    """
+    try:
+        from docling.datamodel.base_models import InputFormat
+        converter = _get_converter()
+        result = converter.convert_string(text, format=InputFormat.MD, name=f"document.{fmt}")
         return result.document
     except Exception:
+        logger.warning(
+            "convert_string failed for format '%s'; doc field will be None",
+            fmt,
+            exc_info=True,
+        )
         return None
 
 
@@ -111,9 +136,7 @@ def _parse_md(path: Path) -> ParseResult:
 
 def _parse_with_docling(path: Path) -> ParseResult:
     """Use Docling's DocumentConverter to parse the file."""
-    from docling.document_converter import DocumentConverter
-
-    converter = DocumentConverter()
+    converter = _get_converter()
     result = converter.convert(str(path))
     doc = result.document
 
@@ -148,6 +171,8 @@ def parse_document(path: str) -> ParseResult:
     Returns:
         ParseResult with cleaned text, format, page count, headings,
         and a DoclingDocument (``doc``) for use with HybridChunker.
+        ``page_count`` defaults to 1 for formats without real page metadata
+        (txt, md).
 
     Raises:
         ValueError: If the file format is not supported or if the path is a directory.

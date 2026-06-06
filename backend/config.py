@@ -37,6 +37,8 @@ class Settings:
     falkordb_dir: str
     embedding_model: str
     gemini_api_key: str
+    # Tokenizer used by HybridChunker (must match the embedding model's tokenizer)
+    chunker_tokenizer: str
 
 
 def load_settings() -> Settings:
@@ -106,6 +108,9 @@ def load_settings() -> Settings:
         falkordb_dir=_normalize_path(os.getenv("FALKORDB_DIR", "./data/falkordb")),
         embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-004"),
         gemini_api_key=gemini_api_key,
+        chunker_tokenizer=os.getenv(
+            "CHUNKER_TOKENIZER", "sentence-transformers/all-MiniLM-L6-v2"
+        ),
     )
 
 

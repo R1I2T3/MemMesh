@@ -20,10 +20,9 @@ def _make_doc_mock(chunks_text: list[str], headings_per_chunk: list[str | None] 
     raw_chunks = []
     for text, heading in zip(chunks_text, headings_per_chunk):
         raw = MagicMock()
-        # serialize() returns the chunk text
         raw.meta.headings = [heading] if heading else []
-        # provenance — page 1
-        prov_item = MagicMock()
+        # provenance — page 1, no char_span (forces text.find fallback)
+        prov_item = MagicMock(spec=["page_no"])  # no char_span attr
         prov_item.page_no = 1
         raw.meta.doc_items = [MagicMock(prov=[prov_item])]
         raw_chunks.append(raw)
@@ -176,6 +175,26 @@ class TestChunkWithHybrid:
         assert len(result) >= 1
         assert result[0].text == "Hello world."
 
+    def test_tokenizer_param_passed_through(self):
+        """Custom tokenizer param is forwarded to HybridChunker constructor."""
+        mock_doc, raw_chunks, texts = _make_doc_mock(["Hello."])
+
+        with patch("docling.chunking.HybridChunker") as MockChunker:
+            instance = MockChunker.return_value
+            instance.chunk.return_value = raw_chunks
+            instance.serialize.side_effect = texts
+
+            chunk_text(
+                text="Hello.",
+                team_id="t1",
+                source_doc_id="doc1",
+                doc=mock_doc,
+                tokenizer="my-custom/tokenizer",
+            )
+
+        call_kwargs = MockChunker.call_args.kwargs
+        assert call_kwargs.get("tokenizer") == "my-custom/tokenizer"
+
 
 # ---------------------------------------------------------------------------
 # Tests using fallback character splitter (doc=None)
@@ -216,9 +235,10 @@ class TestChunkWithCharacterSplitter:
             chunk_size=512,
             chunk_overlap=64,
         )
-        if len(chunks) >= 2:
-            end_of_first = chunks[0].text[-64:]
-            assert end_of_first in chunks[1].text
+        # Hard precondition — regression would produce 1 chunk, hiding the overlap check
+        assert len(chunks) >= 2, "Expected multiple chunks for overlap test"
+        end_of_first = chunks[0].text[-64:]
+        assert end_of_first in chunks[1].text
 
     def test_chunk_has_index(self):
         text = "Word " * 300
@@ -233,9 +253,29 @@ class TestChunkWithCharacterSplitter:
         assert offsets == sorted(offsets)
 
     def test_page_number_via_formfeed(self):
-        text = "Page one content.\f\fPage three content."
-        chunks = chunk_text(text=text, team_id="t1", source_doc_id="doc1", chunk_size=512, chunk_overlap=64)
-        assert len(chunks) >= 1
+        """Page number reflects the page where the chunk's content ends.
+
+        Two form feeds (\\f\\f) separate page 1 from page 3. A chunk whose
+        content crosses both form feeds is attributed to page 3, because
+        _detect_page_number counts form-feeds up to the chunk's end position.
+        """
+        # Force content to be split: 120 "Word " tokens (~600 chars) pushes
+        # the second chunk past the form feeds.
+        page1 = "Word " * 120   # ~600 chars — forces a split at chunk_size=512
+        page3 = "Third page content here."
+        text = page1 + "\f\f" + page3
+        chunks = chunk_text(
+            text=text,
+            team_id="t1",
+            source_doc_id="doc1",
+            chunk_size=512,
+            chunk_overlap=64,
+        )
+        assert len(chunks) >= 2, "Expected multiple chunks so page-3 content is in its own chunk"
+        # First chunk ends before the form feeds → page 1
+        assert chunks[0].page_number == 1
+        # Last chunk's content includes the form feeds and page-3 text → page 3
+        assert chunks[-1].page_number == 3
 
     def test_empty_text_returns_empty(self):
         chunks = chunk_text(text="", team_id="t1", source_doc_id="doc1")

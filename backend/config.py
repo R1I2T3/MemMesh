@@ -30,6 +30,13 @@ class Settings:
     # Data directories
     data_dir: str
     sqlite_path: str
+    upload_dir: str
+
+    # Knowledge Base Indexing & Embeddings
+    chroma_dir: str
+    falkordb_dir: str
+    embedding_model: str
+    gemini_api_key: str
 
 
 def load_settings() -> Settings:
@@ -66,18 +73,24 @@ def load_settings() -> Settings:
     except ValueError as e:
         raise ValueError("API_PORT must be a valid integer.") from e
 
+    gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+    if not gemini_api_key:
+        import warnings
+        warnings.warn(
+            "GEMINI_API_KEY is not set. Ingestion of documents will fail "
+            "when calling the Gemini API to generate embeddings.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     # Normalize data directories relative to backend root if they are relative
     backend_dir = Path(__file__).resolve().parent
-    data_dir_env = os.getenv("DATA_DIR", "./data")
-    sqlite_path_env = os.getenv("SQLITE_PATH", "./data/db.sqlite3")
 
-    data_dir_path = Path(data_dir_env)
-    if not data_dir_path.is_absolute():
-        data_dir_path = (backend_dir / data_dir_path).resolve()
-
-    sqlite_path_obj = Path(sqlite_path_env)
-    if not sqlite_path_obj.is_absolute():
-        sqlite_path_obj = (backend_dir / sqlite_path_obj).resolve()
+    def _normalize_path(path_str: str) -> str:
+        p = Path(path_str)
+        if not p.is_absolute():
+            p = (backend_dir / p).resolve()
+        return str(p)
 
     return Settings(
         admin_email=os.getenv("ADMIN_EMAIL", "admin@example.com"),
@@ -86,8 +99,13 @@ def load_settings() -> Settings:
         jwt_expiry_minutes=jwt_expiry_minutes,
         api_host=os.getenv("API_HOST", "127.0.0.1"),
         api_port=api_port,
-        data_dir=str(data_dir_path),
-        sqlite_path=str(sqlite_path_obj),
+        data_dir=_normalize_path(os.getenv("DATA_DIR", "./data")),
+        sqlite_path=_normalize_path(os.getenv("SQLITE_PATH", "./data/db.sqlite3")),
+        upload_dir=_normalize_path(os.getenv("UPLOAD_DIR", "./data/uploads")),
+        chroma_dir=_normalize_path(os.getenv("CHROMA_DIR", "./data/chroma")),
+        falkordb_dir=_normalize_path(os.getenv("FALKORDB_DIR", "./data/falkordb")),
+        embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-004"),
+        gemini_api_key=gemini_api_key,
     )
 
 

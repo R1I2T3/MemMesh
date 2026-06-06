@@ -39,25 +39,27 @@
 
   function isImage(doc: Doc): boolean {
     const ext = getFileExtension(doc);
-    return ['png', 'jpg', 'jpeg', 'webp'].includes(ext);
+    return ['png', 'jpg', 'jpeg', 'webp', 'image/png', 'image/jpeg', 'image/webp'].includes(ext);
   }
 
   function isPDF(doc: Doc): boolean {
-    return getFileExtension(doc) === 'pdf';
+    const ext = getFileExtension(doc);
+    return ext === 'pdf' || ext === 'application/pdf';
   }
 
   function isDOCX(doc: Doc): boolean {
     const ext = getFileExtension(doc);
-    return ['docx', 'doc'].includes(ext);
+    return ['docx', 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(ext);
   }
 
   function isText(doc: Doc): boolean {
-    return getFileExtension(doc) === 'txt';
+    const ext = getFileExtension(doc);
+    return ext === 'txt' || ext === 'text/plain';
   }
 
   function isMarkdown(doc: Doc): boolean {
     const ext = getFileExtension(doc);
-    return ['md', 'markdown'].includes(ext);
+    return ['md', 'markdown', 'text/markdown'].includes(ext);
   }
 
   function formatFileSize(bytes: number): string {

@@ -28,12 +28,22 @@ class TestParseTxt:
 class TestParseMarkdown:
     def test_parse_markdown(self, tmp_path):
         f = tmp_path / "readme.md"
-        f.write_text("# Title\n\nSome **bold** text.", encoding="utf-8")
+        content = (
+            "# Title\n\n"
+            "Some **bold** text.\n\n"
+            "## Subtitle ##\n\n"
+            "## C# ##\n\n"
+            "```python\n"
+            "# This is a code comment inside python block\n"
+            "print('hello')\n"
+            "```\n"
+        )
+        f.write_text(content, encoding="utf-8")
         result = parse_document(str(f))
         assert "Title" in result.text
         assert "bold" in result.text
         assert result.format == "md"
-        assert result.headings == ["Title"]
+        assert result.headings == ["Title", "Subtitle", "C#"]
 
 
 class TestParseHtml:
@@ -47,6 +57,7 @@ class TestParseHtml:
         assert "Header" in result.text
         assert "Content here" in result.text
         assert result.format == "html"
+        assert result.headings == ["Header"]
 
     def test_parse_htm(self, tmp_path):
         f = tmp_path / "page.htm"
@@ -107,6 +118,26 @@ class TestParseDocx:
         assert result.format == "docx"
         assert result.headings == ["Test Heading"]
 
+    def test_parse_docx_with_table(self, tmp_path):
+        from docx import Document
+
+        docx_path = str(tmp_path / "table.docx")
+        doc = Document()
+        doc.add_heading("Doc with Table", level=1)
+        
+        # Add table
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Header 1"
+        table.cell(0, 1).text = "Header 2"
+        table.cell(1, 0).text = ""  # Empty cell
+        table.cell(1, 1).text = "Cell B"
+        doc.save(docx_path)
+
+        result = parse_document(docx_path)
+        assert "Header 1 | Header 2" in result.text
+        assert "| Cell B" in result.text
+        assert result.headings == ["Doc with Table"]
+
 
 class TestParseImage:
     @patch("pytesseract.image_to_string")
@@ -140,11 +171,21 @@ class TestCleanText:
         result = parse_document(str(f))
         assert result.text == "padded content"
 
+    def test_preserves_indentation(self, tmp_path):
+        f = tmp_path / "indented.txt"
+        f.write_text("Header\n  list item 1\n    nested list item\n", encoding="utf-8")
+        result = parse_document(str(f))
+        assert result.text == "Header\n  list item 1\n    nested list item"
+
 
 class TestFileNotFound:
     def test_file_not_found_raises_error(self):
         with pytest.raises(FileNotFoundError, match="File not found"):
             parse_document("nonexistent_file_path.txt")
+
+    def test_directory_path_raises_error(self, tmp_path):
+        with pytest.raises(ValueError, match="Path is not a file"):
+            parse_document(str(tmp_path))
 
 
 class TestUnsupportedFormat:

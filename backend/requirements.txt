@@ -9,10 +9,12 @@ httpx==0.28.0
 ruff==0.6.9
 black==24.8.0
 isort==5.13.2
-chromadb==0.5.23
+chromadb>=0.5.23
 falkordblite==0.10.0
 # Docling: unified document parsing and structure-aware chunking
 # sentence-transformers is used as the HybridChunker tokenizer (must match CHUNKER_TOKENIZER env var)
 docling==2.97.0
 sentence-transformers>=2.0.0
 spacy==3.8.14
+google-genai>=0.1.1
+

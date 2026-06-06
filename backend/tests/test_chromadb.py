@@ -1,24 +1,26 @@
 # backend/tests/test_chromadb.py
 """Integration tests for ChromaDB team-scoped wrapper."""
 
-import os
-import shutil
-import tempfile
-
 import pytest
+from chromadb.utils import embedding_functions
 
-# Override chroma dir for tests before importing the module
-_test_chroma_dir = tempfile.mkdtemp(prefix="test_chroma_")
-os.environ["CHROMA_DIR"] = _test_chroma_dir
-
-from db.chromadb import (  # noqa: E402
+import db.chromadb
+from db.chromadb import (
     get_or_create_collection,
     upsert_chunks,
     query_collection,
     delete_collection,
     ChromaDBClient,
 )
-from ingestion.chunker import Chunk  # noqa: E402
+from ingestion.chunker import Chunk
+
+
+@pytest.fixture(scope="module", autouse=True)
+def force_local_embeddings():
+    """Force tests to use local DefaultEmbeddingFunction even if GEMINI_API_KEY is set."""
+    db.chromadb._EF_OVERRIDE = embedding_functions.DefaultEmbeddingFunction()
+    yield
+    db.chromadb._EF_OVERRIDE = None
 
 
 @pytest.fixture(autouse=True)
@@ -167,8 +169,3 @@ class TestDeleteCollection:
         results = query_collection("doomed", "deleted", n_results=5)
         assert results == []
 
-
-@pytest.fixture(scope="module", autouse=True)
-def cleanup_test_dir():
-    yield
-    shutil.rmtree(_test_chroma_dir, ignore_errors=True)

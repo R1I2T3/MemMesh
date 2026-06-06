@@ -18,6 +18,7 @@ across calls within the same process.
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -58,12 +59,15 @@ def _build_embedding_function() -> Any:
             )
             logger.debug("Using GoogleGeminiEmbeddingFunction (model=%s)", settings.embedding_model)
             return ef
-        except Exception:
-            logger.warning(
-                "Could not initialise GoogleGeminiEmbeddingFunction; "
-                "falling back to DefaultEmbeddingFunction.",
+        except Exception as e:
+            logger.error(
+                "Failed to initialize GoogleGeminiEmbeddingFunction even though GEMINI_API_KEY is set.",
                 exc_info=True,
             )
+            raise RuntimeError(
+                f"Failed to initialize GoogleGeminiEmbeddingFunction: {e}. "
+                "Check that google-genai is installed and GEMINI_API_KEY is correct."
+            ) from e
 
     logger.debug(
         "GEMINI_API_KEY not set — using DefaultEmbeddingFunction (ONNX MiniLM-L6-v2)."
@@ -80,35 +84,38 @@ class ChromaDBClient:
     """Singleton ChromaDB client manager."""
 
     _client: chromadb.ClientAPI | None = None
+    _lock = threading.Lock()
 
     @classmethod
     def get_client(cls) -> chromadb.ClientAPI:
-        """Get or create the persistent ChromaDB client."""
-        if cls._client is None:
-            chroma_path = Path(settings.chroma_dir)
-            chroma_path.mkdir(parents=True, exist_ok=True)
-            cls._client = chromadb.PersistentClient(
-                path=str(chroma_path),
-                settings=ChromaSettings(
-                    anonymized_telemetry=False,
-                    allow_reset=True,
-                ),
-            )
-        return cls._client
+        """Get or create the persistent ChromaDB client. Thread-safe."""
+        with cls._lock:
+            if cls._client is None:
+                chroma_path = Path(settings.chroma_dir)
+                chroma_path.mkdir(parents=True, exist_ok=True)
+                cls._client = chromadb.PersistentClient(
+                    path=str(chroma_path),
+                    settings=ChromaSettings(
+                        anonymized_telemetry=False,
+                        allow_reset=True,
+                    ),
+                )
+            return cls._client
 
     @classmethod
     def reset(cls) -> None:
-        """Reset the client — wipes all collections (for testing).
+        """Reset the client — wipes all collections (for testing). Thread-safe.
 
         Calls ``client.reset()`` to clear on-disk state, then discards the
         singleton so the next ``get_client()`` creates a fresh instance.
         """
-        if cls._client is not None:
-            try:
-                cls._client.reset()
-            except Exception:
-                pass
-            cls._client = None
+        with cls._lock:
+            if cls._client is not None:
+                try:
+                    cls._client.reset()
+                except Exception:
+                    pass
+                cls._client = None
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +162,14 @@ def upsert_chunks(team_id: str, chunks: list[Chunk]) -> None:
     if not chunks:
         return
 
+    # Defensive validation: ensure all chunks belong to the target team_id
+    for c in chunks:
+        if c.team_id != team_id:
+            raise ValueError(
+                f"Security validation failed: chunk team_id '{c.team_id}' "
+                f"does not match target collection team_id '{team_id}'"
+            )
+
     collection = get_or_create_collection(team_id)
 
     ids = [c.chunk_id for c in chunks]
@@ -198,13 +213,15 @@ def query_collection(
     client = ChromaDBClient.get_client()
     col_name = _collection_name(team_id)
 
-    # Check if collection exists — list_collections returns Collection objects
-    existing_names = [c.name for c in client.list_collections()]
-    if col_name not in existing_names:
-        return []
-
-    ef = _build_embedding_function()
-    collection = client.get_collection(name=col_name, embedding_function=ef)
+    # Use O(1) try-except block instead of O(N) list_collections scan
+    try:
+        ef = _build_embedding_function()
+        collection = client.get_collection(name=col_name, embedding_function=ef)
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "does not exist" in err_msg or "notfound" in err_msg or "not found" in err_msg:
+            return []
+        raise
 
     # Guard against empty collections — ChromaDB raises if n_results > count
     count = collection.count()

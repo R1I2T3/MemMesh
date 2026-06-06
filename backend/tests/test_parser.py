@@ -1,0 +1,155 @@
+"""Unit tests for multi-format document parser."""
+
+from unittest.mock import patch
+
+import pytest
+
+from ingestion.parser import parse_document, ParseResult
+
+
+class TestParseTxt:
+    def test_parse_plain_text(self, tmp_path):
+        f = tmp_path / "sample.txt"
+        f.write_text("Hello world.\nSecond line.", encoding="utf-8")
+        result = parse_document(str(f))
+        assert isinstance(result, ParseResult)
+        assert "Hello world." in result.text
+        assert "Second line." in result.text
+        assert result.format == "txt"
+
+    def test_parse_empty_text(self, tmp_path):
+        f = tmp_path / "empty.txt"
+        f.write_text("", encoding="utf-8")
+        result = parse_document(str(f))
+        assert result.text == ""
+        assert result.format == "txt"
+
+
+class TestParseMarkdown:
+    def test_parse_markdown(self, tmp_path):
+        f = tmp_path / "readme.md"
+        f.write_text("# Title\n\nSome **bold** text.", encoding="utf-8")
+        result = parse_document(str(f))
+        assert "Title" in result.text
+        assert "bold" in result.text
+        assert result.format == "md"
+        assert result.headings == ["Title"]
+
+
+class TestParseHtml:
+    def test_parse_html(self, tmp_path):
+        f = tmp_path / "page.html"
+        f.write_text(
+            "<html><body><h1>Header</h1><p>Content here</p></body></html>",
+            encoding="utf-8",
+        )
+        result = parse_document(str(f))
+        assert "Header" in result.text
+        assert "Content here" in result.text
+        assert result.format == "html"
+
+    def test_parse_htm(self, tmp_path):
+        f = tmp_path / "page.htm"
+        f.write_text(
+            "<html><body><h1>Header HTM</h1><p>Content HTM</p></body></html>",
+            encoding="utf-8",
+        )
+        result = parse_document(str(f))
+        assert "Header HTM" in result.text
+        assert "Content HTM" in result.text
+        assert result.format == "html"
+
+    def test_strips_scripts_and_styles(self, tmp_path):
+        f = tmp_path / "messy.html"
+        f.write_text(
+            "<html><head><style>body{}</style></head>"
+            "<body><script>alert(1)</script><p>Clean text</p></body></html>",
+            encoding="utf-8",
+        )
+        result = parse_document(str(f))
+        assert "Clean text" in result.text
+        assert "alert" not in result.text
+        assert "body{}" not in result.text
+
+
+class TestParsePdf:
+    def test_parse_pdf(self, tmp_path):
+        """Create a minimal PDF with PyMuPDF and parse it back."""
+        import fitz
+
+        pdf_path = str(tmp_path / "test.pdf")
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "PDF content here")
+        doc.save(pdf_path)
+        doc.close()
+
+        result = parse_document(pdf_path)
+        assert "PDF content here" in result.text
+        assert result.format == "pdf"
+        assert result.page_count == 1
+
+
+class TestParseDocx:
+    def test_parse_docx(self, tmp_path):
+        """Create a minimal DOCX with python-docx and parse it back."""
+        from docx import Document
+
+        docx_path = str(tmp_path / "test.docx")
+        doc = Document()
+        doc.add_heading("Test Heading", level=1)
+        doc.add_paragraph("Paragraph content.")
+        doc.save(docx_path)
+
+        result = parse_document(docx_path)
+        assert "Test Heading" in result.text
+        assert "Paragraph content." in result.text
+        assert result.format == "docx"
+        assert result.headings == ["Test Heading"]
+
+
+class TestParseImage:
+    @patch("pytesseract.image_to_string")
+    def test_parse_image_ocr(self, mock_ocr, tmp_path):
+        """Create a dummy image file and verify OCR parsing is mocked/called correctly."""
+        from PIL import Image
+
+        mock_ocr.return_value = "Mocked OCR Text from Image"
+        img_path = tmp_path / "dummy.png"
+        
+        # Create a tiny 10x10 image
+        img = Image.new("RGB", (10, 10), color="white")
+        img.save(img_path)
+
+        result = parse_document(str(img_path))
+        assert result.text == "Mocked OCR Text from Image"
+        assert result.format == "png"
+        mock_ocr.assert_called_once()
+
+
+class TestCleanText:
+    def test_deduplicates_whitespace(self, tmp_path):
+        f = tmp_path / "spaces.txt"
+        f.write_text("Too   many    spaces\n\n\n\nand lines.", encoding="utf-8")
+        result = parse_document(str(f))
+        assert result.text == "Too many spaces\n\nand lines."
+
+    def test_strips_leading_trailing(self, tmp_path):
+        f = tmp_path / "padded.txt"
+        f.write_text("   padded content   ", encoding="utf-8")
+        result = parse_document(str(f))
+        assert result.text == "padded content"
+
+
+class TestFileNotFound:
+    def test_file_not_found_raises_error(self):
+        with pytest.raises(FileNotFoundError, match="File not found"):
+            parse_document("nonexistent_file_path.txt")
+
+
+class TestUnsupportedFormat:
+    def test_unsupported_raises_error(self, tmp_path):
+        f = tmp_path / "data.xyz"
+        f.write_text("binary stuff", encoding="utf-8")
+        with pytest.raises(ValueError, match="Unsupported"):
+            parse_document(str(f))

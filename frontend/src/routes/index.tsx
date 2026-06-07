@@ -1,8 +1,9 @@
-import { createRoute, useNavigate } from '@tanstack/react-router';
+import { createRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { Route as rootRoute } from './__root';
 import { useEffect, useState, type FormEvent } from 'react';
 import { apiFetch } from '../lib/api';
 import { formatHealthStatus } from '../utils/health';
+import { getStoredAuth } from '../utils/auth';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,12 @@ import { Button } from '@/components/ui/button';
 export const Route = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
+  beforeLoad: () => {
+    const auth = getStoredAuth();
+    if (auth) {
+      throw redirect({ to: '/dashboard' });
+    }
+  },
   component: LoginHome,
 });
 
@@ -111,4 +118,3 @@ function LoginHome() {
     </div>
   );
 }
-

@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("MemMesh starting up...")
-    # Seed superadmin
-    with SessionLocal() as db:
-        try:
+    # Seed superadmin safely; startup should continue if the database is offline.
+    db: Session | None = None
+    try:
+        with SessionLocal() as db:
             admin = db.query(User).filter_by(email=settings.SUPERADMIN_EMAIL).first()
             if not admin:
                 logger.info("Seeding superadmin user...")
@@ -34,8 +35,9 @@ async def lifespan(app: FastAPI):
                 logger.info(f"Superadmin user seeded with ID: {admin_id}")
             else:
                 logger.info("Superadmin user already exists.")
-        except Exception as e:
-            logger.error(f"Error seeding superadmin user: {e}")
+    except Exception as e:
+        logger.error(f"Error seeding superadmin user (database might be offline): {e}")
+        if db is not None:
             db.rollback()
     yield
     logger.info("MemMesh shutting down...")
@@ -63,4 +65,3 @@ def health(db: Session = Depends(get_db)):
         statuses["mysql"] = "error"
     # For Task 2, we just check mysql; we will add other checks in Task 18.
     return {"status": "ok" if all(v == "ok" for v in statuses.values()) else "degraded", "services": statuses}
-

@@ -4,9 +4,9 @@ from backend.auth.jwt import decode_access_token
 
 logger = logging.getLogger(__name__)
 
-def get_current_user(authorization: str = Header(...)):
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid authorization header")
+def get_current_user(authorization: str | None = Header(default=None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
     try:
         token = authorization.split(" ", 1)[1]
         return decode_access_token(token)

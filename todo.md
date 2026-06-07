@@ -4,10 +4,10 @@
 - [x] Task 1: Docker Compose & Project Scaffolding
 - [x] Task 2: Backend Config & Database Connection
 - [x] Task 3: SQLAlchemy Models with Indexes & Alembic Migrations
-- [/] Task 4: Frontend TanStack Router Setup
+- [x] Task 4: Frontend TanStack Router Setup
 
 ## Phase 2: Authentication & Authorization
-- [ ] Task 5: Password Security, JWT & Auth Middleware
+- [x] Task 5: Password Security, JWT & Auth Middleware
 - [ ] Task 6: Login API, Superadmin Seeding & Route Guards
 
 ## Phase 3: Admin & UI Shell

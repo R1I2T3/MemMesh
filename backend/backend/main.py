@@ -1,17 +1,42 @@
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from backend.db.mysql import get_db
+from backend.db.mysql import get_db, SessionLocal
 from backend.config import settings
+from backend.models import User
+from backend.auth.passwords import hash_password
+from backend.api.routes.auth import router as auth_router
 
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("MemMesh starting up...")
+    # Seed superadmin
+    with SessionLocal() as db:
+        try:
+            admin = db.query(User).filter_by(email=settings.SUPERADMIN_EMAIL).first()
+            if not admin:
+                logger.info("Seeding superadmin user...")
+                admin_id = str(uuid.uuid4())
+                admin = User(
+                    user_id=admin_id,
+                    email=settings.SUPERADMIN_EMAIL,
+                    password_hash=hash_password(settings.SUPERADMIN_PASSWORD),
+                    global_role="superadmin",
+                )
+                db.add(admin)
+                db.commit()
+                logger.info(f"Superadmin user seeded with ID: {admin_id}")
+            else:
+                logger.info("Superadmin user already exists.")
+        except Exception as e:
+            logger.error(f"Error seeding superadmin user: {e}")
+            db.rollback()
     yield
     logger.info("MemMesh shutting down...")
 
@@ -25,6 +50,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
+
 @app.get("/api/health")
 def health(db: Session = Depends(get_db)):
     statuses = {}
@@ -36,3 +63,4 @@ def health(db: Session = Depends(get_db)):
         statuses["mysql"] = "error"
     # For Task 2, we just check mysql; we will add other checks in Task 18.
     return {"status": "ok" if all(v == "ok" for v in statuses.values()) else "degraded", "services": statuses}
+

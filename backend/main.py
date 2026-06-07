@@ -12,6 +12,7 @@ from backend.models import User
 from backend.auth.passwords import hash_password
 from backend.api.routes.auth import router as auth_router
 from backend.api.routes.admin import router as admin_router
+from backend.db.weaviate import get_weaviate_mgr, _weaviate_mgr
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,6 @@ async def lifespan(app: FastAPI):
     
     # Initialize Weaviate schema
     try:
-        from backend.db.weaviate import get_weaviate_mgr
         weaviate_mgr = get_weaviate_mgr()
         weaviate_mgr.ensure_schema()
     except Exception as e:
@@ -58,7 +58,6 @@ async def lifespan(app: FastAPI):
     
     # Close Weaviate client on shutdown
     try:
-        from backend.db.weaviate import _weaviate_mgr
         if _weaviate_mgr is not None:
             _weaviate_mgr.close()
     except Exception as e:

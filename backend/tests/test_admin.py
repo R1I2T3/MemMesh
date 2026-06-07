@@ -30,7 +30,7 @@ def setup_db_and_dependencies():
     # Recreate tables cleanly for every single test
     Base.metadata.create_all(bind=engine)
     app.dependency_overrides[get_db] = override_get_db
-    with patch("backend.db.weaviate.get_weaviate_mgr") as mock_get_mgr:
+    with patch("backend.api.routes.admin.get_weaviate_mgr") as mock_get_mgr:
         mock_mgr = MagicMock()
         mock_get_mgr.return_value = mock_mgr
         yield
@@ -53,6 +53,22 @@ def test_create_team_as_superadmin():
     res = client.post("/api/admin/teams", json={"name": "TestTeam"}, headers=get_superadmin_headers())
     assert res.status_code == 200
     assert "team_id" in res.json()
+
+def test_create_team_weaviate_failure():
+    with patch("backend.api.routes.admin.get_weaviate_mgr") as mock_get_mgr:
+        mock_mgr = MagicMock()
+        mock_mgr.create_tenant.side_effect = Exception("Weaviate connection error")
+        mock_get_mgr.return_value = mock_mgr
+        
+        res = client.post("/api/admin/teams", json={"name": "FailTeam"}, headers=get_superadmin_headers())
+        assert res.status_code == 500
+        assert "Failed to provision team workspace" in res.json()["detail"]
+        
+        # Verify team is not in MySQL database
+        db = TestingSessionLocal()
+        team = db.query(Team).filter_by(name="FailTeam").first()
+        assert team is None
+        db.close()
 
 def test_create_team_duplicate():
     # First creation

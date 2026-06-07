@@ -8,6 +8,7 @@ from backend.db.mysql import get_db
 from backend.models import User, Team, TeamMember
 from backend.auth.middleware import require_global_role
 from backend.auth.passwords import hash_password
+from backend.db.weaviate import get_weaviate_mgr
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_global_role("superadmin"))])
@@ -36,16 +37,17 @@ def create_team(payload: TeamCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Team already exists")
     team = Team(team_id=str(uuid.uuid4()), name=payload.name)
     db.add(team)
-    db.commit()
 
     # Provision tenant in Weaviate
     try:
-        from backend.db.weaviate import get_weaviate_mgr
         weaviate_mgr = get_weaviate_mgr()
         weaviate_mgr.create_tenant(team.team_id)
     except Exception as e:
+        db.rollback()
         logger.error(f"Failed to create Weaviate tenant for team {team.team_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to provision team workspace: {e}")
 
+    db.commit()
     return {"status": "created", "team_id": team.team_id}
 
 @router.get("/teams")

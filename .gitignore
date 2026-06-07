@@ -59,6 +59,5 @@ coverage/
 *.swo
 *~
 .agents/*
-docs/*
 skills-lock.json
 .auth/

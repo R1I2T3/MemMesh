@@ -10,8 +10,10 @@ from backend.config import settings
 from backend.models import User
 from backend.auth.passwords import hash_password
 from backend.api.routes.auth import router as auth_router
+from backend.api.routes.admin import router as admin_router
 
 logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -53,6 +55,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(admin_router)
 
 @app.get("/api/health")
 def health(db: Session = Depends(get_db)):

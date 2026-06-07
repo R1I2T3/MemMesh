@@ -27,6 +27,7 @@ class WeaviateManager:
                 Property(name="parent_id", data_type=DataType.TEXT),
                 Property(name="page_number", data_type=DataType.INT),
                 Property(name="bbox", data_type=DataType.NUMBER_ARRAY),
+                Property(name="dl_meta", data_type=DataType.TEXT),
                 Property(name="allowed_user_ids", data_type=DataType.TEXT_ARRAY),
             ],
         )
@@ -45,6 +46,7 @@ class WeaviateManager:
                     "parent_id": chunk["parent_id"],
                     "page_number": chunk["page_number"],
                     "bbox": chunk.get("bbox", []),
+                    "dl_meta": chunk.get("dl_meta", ""),
                     "allowed_user_ids": allowed_users,
                 })
 
@@ -62,6 +64,7 @@ class WeaviateManager:
                 "parent_id": o.properties.get("parent_id", ""),
                 "page_number": o.properties.get("page_number", 0),
                 "bbox": o.properties.get("bbox", []),
+                "dl_meta": o.properties.get("dl_meta", ""),
             }
             for o in results.objects
         ]

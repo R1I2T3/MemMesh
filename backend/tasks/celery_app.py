@@ -10,5 +10,9 @@ celery_app = Celery(
 celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
-    accept_content=["json"]
+    accept_content=["json"],
+    # Acknowledge task only AFTER completion; re-queues on worker crash mid-parse.
+    task_acks_late=True,
+    # Prevent memory pressure: fetch one task at a time per worker process.
+    worker_prefetch_multiplier=1,
 )

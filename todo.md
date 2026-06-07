@@ -20,7 +20,7 @@
 ## Phase 4: Data Ingestion Pipeline
 
 - [x] Task 9: Weaviate Schema, Multi-Tenancy & Tenant Provisioning
-- [ ] Task 10: IBM Docling Parser, Chunker & Celery Upload Worker
+- [x] Task 10: IBM Docling Parser, Chunker & Celery Upload Worker
 - [ ] Task 11: Neo4j Knowledge Graph & Upload API
 
 ## Phase 5: Query & Conversational Memory

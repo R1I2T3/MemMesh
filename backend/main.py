@@ -19,6 +19,15 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("MemMesh starting up...")
+    
+    # Initialize Weaviate schema
+    try:
+        from backend.db.weaviate import get_weaviate_mgr
+        weaviate_mgr = get_weaviate_mgr()
+        weaviate_mgr.ensure_schema()
+    except Exception as e:
+        logger.error(f"Failed to initialize Weaviate schema (Weaviate might be offline): {e}")
+
     if "pytest" not in sys.modules:
         # Seed superadmin safely; startup should continue if the database is offline.
         db: Session | None = None
@@ -46,6 +55,15 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Skipping superadmin seeding in test mode.")
     yield
+    
+    # Close Weaviate client on shutdown
+    try:
+        from backend.db.weaviate import _weaviate_mgr
+        if _weaviate_mgr is not None:
+            _weaviate_mgr.close()
+    except Exception as e:
+        logger.error(f"Error closing Weaviate client: {e}")
+        
     logger.info("MemMesh shutting down...")
 
 app = FastAPI(title="MemMesh API", version="0.1.0", lifespan=lifespan)

@@ -37,6 +37,15 @@ def create_team(payload: TeamCreate, db: Session = Depends(get_db)):
     team = Team(team_id=str(uuid.uuid4()), name=payload.name)
     db.add(team)
     db.commit()
+
+    # Provision tenant in Weaviate
+    try:
+        from backend.db.weaviate import get_weaviate_mgr
+        weaviate_mgr = get_weaviate_mgr()
+        weaviate_mgr.create_tenant(team.team_id)
+    except Exception as e:
+        logger.error(f"Failed to create Weaviate tenant for team {team.team_id}: {e}")
+
     return {"status": "created", "team_id": team.team_id}
 
 @router.get("/teams")

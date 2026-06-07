@@ -23,12 +23,17 @@ def override_get_db():
     finally:
         db.close()
 
+from unittest.mock import patch, MagicMock
+
 @pytest.fixture(autouse=True)
 def setup_db_and_dependencies():
     # Recreate tables cleanly for every single test
     Base.metadata.create_all(bind=engine)
     app.dependency_overrides[get_db] = override_get_db
-    yield
+    with patch("backend.db.weaviate.get_weaviate_mgr") as mock_get_mgr:
+        mock_mgr = MagicMock()
+        mock_get_mgr.return_value = mock_mgr
+        yield
     app.dependency_overrides.clear()
     Base.metadata.drop_all(bind=engine)
 

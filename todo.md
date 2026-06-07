@@ -15,7 +15,7 @@
 ## Phase 3: Admin & UI Shell
 
 - [x] Task 7: Admin CRUD APIs (Teams, Users, Members)
-- [ ] Task 8: Dashboard Layout, Sidebar, Theme Switcher & Child Routes
+- [x] Task 8: Dashboard Layout, Sidebar, Theme Switcher & Child Routes
 
 ## Phase 4: Data Ingestion Pipeline
 

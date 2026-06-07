@@ -1,4 +1,4 @@
-interface TokenPayload { sub: string; role: string; exp: number; }
+interface TokenPayload { sub: string; email: string; role: string; exp: number; }
 
 export function parseTokenPayload(token: string): TokenPayload | null {
   try {

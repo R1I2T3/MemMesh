@@ -23,5 +23,5 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if not user or not password_correct:
         logger.warning(f"Failed login attempt for {payload.email}")
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_access_token({"sub": user.user_id, "role": user.global_role})
+    token = create_access_token({"sub": user.user_id, "email": user.email, "role": user.global_role})
     return {"token": token, "role": user.global_role}

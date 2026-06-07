@@ -29,6 +29,7 @@ import {
   FileTextIcon,
   UserIcon,
   LayoutDashboardIcon,
+  UsersIcon,
 } from 'lucide-react';
 
 export const Route = createRoute({
@@ -63,7 +64,7 @@ function DashboardLayout() {
 
   const auth = getStoredAuth();
   const tokenPayload = auth ? parseTokenPayload(auth.token) : null;
-  const userEmail = tokenPayload?.sub || 'user@memmesh.com';
+  const userEmail = tokenPayload?.email || 'user@memmesh.com';
   const userRole = auth?.role || 'user';
 
   return (
@@ -117,6 +118,21 @@ function DashboardLayout() {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  {userRole === 'superadmin' && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild>
+                        <Link
+                          id="link-admin"
+                          to="/dashboard/admin"
+                          activeProps={{ className: 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' }}
+                          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        >
+                          <UsersIcon />
+                          <span>Admin Panel</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>

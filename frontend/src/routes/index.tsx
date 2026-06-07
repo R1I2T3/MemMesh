@@ -63,17 +63,17 @@ function LoginHome() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
       <div className="w-full max-w-md flex flex-col gap-4">
         <div className="flex flex-col gap-1 text-center">
           <h1 className="text-3xl font-bold tracking-tight">MemMesh</h1>
-          <p id="system-status" className="text-sm text-slate-400">System: {status}</p>
+          <p id="system-status" className="text-sm text-muted-foreground">System: {status}</p>
         </div>
-        <Card className="bg-slate-900 border-slate-800 text-white">
+        <Card className="bg-card border-border text-card-foreground">
           <form onSubmit={handleLogin}>
             <CardHeader>
               <CardTitle className="text-xl">Welcome Back</CardTitle>
-              <CardDescription className="text-slate-400">Login to your account to continue</CardDescription>
+              <CardDescription className="text-muted-foreground">Login to your account to continue</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
@@ -85,7 +85,7 @@ function LoginHome() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
-                  className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-500 focus-visible:ring-indigo-500 focus-visible:border-indigo-500"
+                  className="bg-background border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring focus-visible:border-border"
                 />
               </div>
               <div className="flex flex-col gap-2">
@@ -97,17 +97,17 @@ function LoginHome() {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
-                  className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-500 focus-visible:ring-indigo-500 focus-visible:border-indigo-500"
+                  className="bg-background border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring focus-visible:border-border"
                 />
               </div>
-              {error && <p id="login-error" className="text-sm text-red-400 font-medium">{error}</p>}
+              {error && <p id="login-error" className="text-sm text-destructive font-medium">{error}</p>}
             </CardContent>
             <CardFooter className="flex flex-col gap-2">
               <Button
                 id="login-button"
                 type="submit"
                 disabled={loading}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
               >
                 {loading ? 'Logging in...' : 'Sign In'}
               </Button>

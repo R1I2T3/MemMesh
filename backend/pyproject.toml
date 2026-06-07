@@ -29,6 +29,7 @@ dependencies = [
     "docling",
     "arize-phoenix",
     "openinference-instrumentation-langchain",
+    "email-validator",
 ]
 
 [dependency-groups]
@@ -41,3 +42,7 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+package = false
+

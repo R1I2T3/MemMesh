@@ -10,6 +10,11 @@ test.describe('Admin CRUD API tests', () => {
   let createdUserId: string;
   let createdTeamId: string;
 
+  // Generate unique team names and email addresses to avoid database pollution and conflicts
+  const uniqueSuffix = Date.now().toString();
+  const testEmail = `e2e-test-user-${uniqueSuffix}@memmesh.com`;
+  const testTeamName = `E2ETestTeam-${uniqueSuffix}`;
+
   test.beforeAll(async ({ request }) => {
     // 1. Log in as superadmin
     const loginRes = await request.post(`${BACKEND_URL}/api/auth/login`, {
@@ -29,7 +34,7 @@ test.describe('Admin CRUD API tests', () => {
         Authorization: `Bearer ${superadminToken}`,
       },
       data: {
-        email: 'e2e-test-user@memmesh.com',
+        email: testEmail,
         password: 'e2e-password-123',
         global_role: 'user',
       },
@@ -42,7 +47,7 @@ test.describe('Admin CRUD API tests', () => {
     // 3. Log in as the newly created user to get their token
     const userLoginRes = await request.post(`${BACKEND_URL}/api/auth/login`, {
       data: {
-        email: 'e2e-test-user@memmesh.com',
+        email: testEmail,
         password: 'e2e-password-123',
       },
     });
@@ -88,7 +93,7 @@ test.describe('Admin CRUD API tests', () => {
         Authorization: `Bearer ${superadminToken}`,
       },
       data: {
-        name: 'E2ETestTeam',
+        name: testTeamName,
       },
     });
     expect(createRes.status()).toBe(200);
@@ -106,7 +111,7 @@ test.describe('Admin CRUD API tests', () => {
     const listData = await listRes.json();
     expect(listData.teams).toBeDefined();
     const names = listData.teams.map((t: any) => t.name);
-    expect(names).toContain('E2ETestTeam');
+    expect(names).toContain(testTeamName);
   });
 
   test('should succeed when superadmin adds, lists, and removes a member', async ({ request }) => {
@@ -118,7 +123,7 @@ test.describe('Admin CRUD API tests', () => {
       data: {
         team_id: createdTeamId,
         user_id: createdUserId,
-        role: 'editor',
+        role: 'admin',
       },
     });
     expect(addRes.status()).toBe(200);
@@ -133,7 +138,7 @@ test.describe('Admin CRUD API tests', () => {
     const listData = await listRes.json();
     expect(listData.members.length).toBe(1);
     expect(listData.members[0].user_id).toBe(createdUserId);
-    expect(listData.members[0].role).toBe('editor');
+    expect(listData.members[0].role).toBe('admin');
 
     // Remove member
     const removeRes = await request.delete(

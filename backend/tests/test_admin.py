@@ -14,7 +14,6 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool
 )
-Base.metadata.create_all(bind=engine)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def override_get_db():
@@ -24,7 +23,14 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
+@pytest.fixture(autouse=True)
+def setup_db_and_dependencies():
+    # Recreate tables cleanly for every single test
+    Base.metadata.create_all(bind=engine)
+    app.dependency_overrides[get_db] = override_get_db
+    yield
+    app.dependency_overrides.clear()
+    Base.metadata.drop_all(bind=engine)
 
 client = TestClient(app)
 
@@ -44,14 +50,22 @@ def test_create_team_as_superadmin():
     assert "team_id" in res.json()
 
 def test_create_team_duplicate():
-    res = client.post("/api/admin/teams", json={"name": "TestTeam"}, headers=get_superadmin_headers())
-    assert res.status_code == 409
+    # First creation
+    res1 = client.post("/api/admin/teams", json={"name": "TestTeam"}, headers=get_superadmin_headers())
+    assert res1.status_code == 200
+    
+    # Duplicate creation
+    res2 = client.post("/api/admin/teams", json={"name": "TestTeam"}, headers=get_superadmin_headers())
+    assert res2.status_code == 409
 
 def test_create_team_as_user_forbidden():
     res = client.post("/api/admin/teams", json={"name": "TestTeam2"}, headers=get_user_headers())
     assert res.status_code == 403
 
 def test_list_teams():
+    # Insert a team first
+    client.post("/api/admin/teams", json={"name": "TestTeam"}, headers=get_superadmin_headers())
+    
     res = client.get("/api/admin/teams", headers=get_superadmin_headers())
     assert res.status_code == 200
     data = res.json()
@@ -85,14 +99,30 @@ def test_create_user_as_superadmin():
     assert "user_id" in res.json()
 
 def test_create_user_duplicate():
-    res = client.post(
+    # First creation
+    res1 = client.post(
+        "/api/admin/users",
+        json={"email": "newuser@memmesh.com", "password": "securepassword", "global_role": "user"},
+        headers=get_superadmin_headers()
+    )
+    assert res1.status_code == 200
+
+    # Duplicate creation
+    res2 = client.post(
         "/api/admin/users",
         json={"email": "newuser@memmesh.com", "password": "anotherpassword"},
         headers=get_superadmin_headers()
     )
-    assert res.status_code == 409
+    assert res2.status_code == 409
 
 def test_list_users():
+    # Create user first
+    client.post(
+        "/api/admin/users",
+        json={"email": "newuser@memmesh.com", "password": "securepassword", "global_role": "user"},
+        headers=get_superadmin_headers()
+    )
+    
     res = client.get("/api/admin/users", headers=get_superadmin_headers())
     assert res.status_code == 200
     data = res.json()
@@ -139,6 +169,11 @@ def test_member_crud_flow():
         headers=get_superadmin_headers()
     )
     assert add_res.status_code == 200
+    member_data = add_res.json()
+    assert member_data["status"] == "added"
+    assert member_data["team_id"] == team_id
+    assert member_data["user_id"] == user_id
+    assert member_data["role"] == "admin"
 
     # Add duplicate
     add_dup = client.post(

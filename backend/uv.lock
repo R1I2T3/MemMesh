@@ -461,7 +461,7 @@ wheels = [
 [[package]]
 name = "backend"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "aiomysql" },
     { name = "alembic" },
@@ -471,6 +471,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "deepeval" },
     { name = "docling" },
+    { name = "email-validator" },
     { name = "fastapi" },
     { name = "guardrails-ai" },
     { name = "langchain-community" },
@@ -506,6 +507,7 @@ requires-dist = [
     { name = "cryptography" },
     { name = "deepeval" },
     { name = "docling" },
+    { name = "email-validator" },
     { name = "fastapi" },
     { name = "guardrails-ai" },
     { name = "langchain-community" },

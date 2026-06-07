@@ -1,5 +1,6 @@
 import logging
 import uuid
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
@@ -19,12 +20,12 @@ class TeamCreate(BaseModel):
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
-    global_role: str = "user"
+    global_role: Literal["user", "admin", "superadmin"] = "user"
 
 class MemberAdd(BaseModel):
     team_id: str
     user_id: str
-    role: str = "member"
+    role: Literal["member", "admin", "owner"] = "member"
 
 # --- Teams CRUD ---
 
@@ -110,7 +111,12 @@ def add_member(payload: MemberAdd, db: Session = Depends(get_db)):
     member = TeamMember(team_id=payload.team_id, user_id=payload.user_id, role=payload.role)
     db.add(member)
     db.commit()
-    return {"status": "added"}
+    return {
+        "status": "added",
+        "team_id": member.team_id,
+        "user_id": member.user_id,
+        "role": member.role
+    }
 
 @router.get("/members")
 def list_members(

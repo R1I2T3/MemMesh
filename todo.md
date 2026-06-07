@@ -1,9 +1,9 @@
 # Todo: MemMesh Rebuild Plan Execution
 
 ## Phase 1: Infrastructure Foundation
-- [/] Task 1: Docker Compose & Project Scaffolding
-- [ ] Task 2: Backend Config & Database Connection
-- [ ] Task 3: SQLAlchemy Models with Indexes & Alembic Migrations
+- [x] Task 1: Docker Compose & Project Scaffolding
+- [x] Task 2: Backend Config & Database Connection
+- [/] Task 3: SQLAlchemy Models with Indexes & Alembic Migrations
 - [ ] Task 4: Frontend TanStack Router Setup
 
 ## Phase 2: Authentication & Authorization

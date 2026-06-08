@@ -2,6 +2,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Header, UploadFile, File
 from sqlalchemy.orm import Session
 from celery.result import AsyncResult
+from backend.tasks.celery_app import celery_app
 
 from backend.db.mysql import get_db
 from backend.auth.middleware import get_current_user
@@ -47,7 +48,7 @@ async def upload_document(
 
 @router.get("/upload/status/{task_id}")
 def get_upload_status(task_id: str, current_user: dict = Depends(get_current_user)):
-    res = AsyncResult(task_id)
+    res = AsyncResult(task_id, app=celery_app)
     if res.state == "SUCCESS":
         status = "completed"
     elif res.state == "FAILURE":

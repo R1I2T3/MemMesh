@@ -3,7 +3,7 @@ import { Route as rootRoute } from './__root';
 import { getStoredAuth, parseTokenPayload } from '../utils/auth';
 import { getSavedTheme, applyTheme, getNextTheme } from '../utils/theme';
 import { useEffect, useState } from 'react';
-import { cn } from '@/lib/utils';
+
 import {
   SidebarProvider,
   Sidebar,
@@ -93,44 +93,50 @@ function DashboardLayout() {
               <SidebarGroupContent className="mt-2">
                 <SidebarMenu className="flex flex-col gap-1">
                   <SidebarMenuItem>
-                    <SidebarMenuButton asChild>
-                      <Link
-                        id="link-chat"
-                        to="/dashboard/chat"
-                        activeProps={{ className: 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' }}
-                        className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      >
-                        <MessageSquareIcon />
-                        <span>Chat Console</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild>
-                      <Link
-                        id="link-docs"
-                        to="/dashboard/docs"
-                        activeProps={{ className: 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' }}
-                        className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      >
-                        <FileTextIcon />
-                        <span>Docs Console</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  {userRole === 'superadmin' && (
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
+                    <SidebarMenuButton
+                      render={
                         <Link
-                          id="link-admin"
-                          to="/dashboard/admin"
+                          id="link-chat"
+                          to="/dashboard/chat"
                           activeProps={{ className: 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' }}
                           className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                         >
-                          <UsersIcon />
-                          <span>Admin Panel</span>
+                          <MessageSquareIcon />
+                          <span>Chat Console</span>
                         </Link>
-                      </SidebarMenuButton>
+                      }
+                    />
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      render={
+                        <Link
+                          id="link-docs"
+                          to="/dashboard/docs"
+                          activeProps={{ className: 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' }}
+                          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        >
+                          <FileTextIcon />
+                          <span>Docs Console</span>
+                        </Link>
+                      }
+                    />
+                  </SidebarMenuItem>
+                  {userRole === 'superadmin' && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        render={
+                          <Link
+                            id="link-admin"
+                            to="/dashboard/admin"
+                            activeProps={{ className: 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' }}
+                            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                          >
+                            <UsersIcon />
+                            <span>Admin Panel</span>
+                          </Link>
+                        }
+                      />
                     </SidebarMenuItem>
                   )}
                 </SidebarMenu>

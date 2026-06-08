@@ -25,11 +25,12 @@ test.describe('Query API & Chat Branching UI E2E Tests', () => {
 
     // Wait for query API response before checking UI
     const queryResponse = page.waitForResponse(
-      resp => resp.url().includes('/api/query') && resp.status() === 200,
+      resp => resp.url().includes('/api/query/stream') && resp.status() === 200,
       { timeout: 15000 }
     );
     await page.locator('button[type="submit"]').click();
     await queryResponse;
+    await expect(chatInput).toBeEnabled();
 
     // Verify user and assistant messages appear
     const userMsg = page.getByText('What is your status?', { exact: true });
@@ -54,11 +55,12 @@ test.describe('Query API & Chat Branching UI E2E Tests', () => {
     // Send the first branched question
     await chatInput.fill('First branched path query');
     const branch1Response = page.waitForResponse(
-      resp => resp.url().includes('/api/query') && resp.status() === 200,
+      resp => resp.url().includes('/api/query/stream') && resp.status() === 200,
       { timeout: 15000 }
     );
     await page.locator('button[type="submit"]').click();
     await branch1Response;
+    await expect(chatInput).toBeEnabled();
 
     // Verify first branch response is visible
     const branch1Msg = page.getByText('First branched path query', { exact: true });
@@ -76,11 +78,12 @@ test.describe('Query API & Chat Branching UI E2E Tests', () => {
     // Send the second branched question
     await chatInput.fill('Second branched path query');
     const branch2Response = page.waitForResponse(
-      resp => resp.url().includes('/api/query') && resp.status() === 200,
+      resp => resp.url().includes('/api/query/stream') && resp.status() === 200,
       { timeout: 15000 }
     );
     await page.locator('button[type="submit"]').click();
     await branch2Response;
+    await expect(chatInput).toBeEnabled();
 
     // Verify second branch response is visible
     const branch2Msg = page.getByText('Second branched path query', { exact: true });

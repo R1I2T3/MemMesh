@@ -1,8 +1,10 @@
 import { createRoute } from '@tanstack/react-router';
 import { Route as dashboardRoute } from './_dashboard';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { apiFetch } from '../lib/api';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { apiFetch, API_BASE } from '../lib/api';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
+import { clientSideInputCheck } from '../utils/safety';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -175,46 +177,119 @@ function ChatInterfaceConsole() {
     e.preventDefault();
     if (!queryInput.trim() || sendingQuery) return;
 
-    setSendingQuery(true);
     setError('');
     const currentQuery = queryInput;
     const currentParentId = parentMsgId;
+
+    // Client-side SQL injection validation
+    if (!clientSideInputCheck(currentQuery)) {
+      setError('Input query failed client-side security checks (SQL injection pattern detected).');
+      return;
+    }
+
+    setSendingQuery(true);
     setQueryInput('');
 
-    try {
-      const queryParams = new URLSearchParams({
-        q: currentQuery,
-        session_id: activeSessionId
-      });
-      if (activeTeamId) {
-        queryParams.append('team_id', activeTeamId);
-      }
-      if (currentParentId) {
-        queryParams.append('parent_msg_id', currentParentId);
-      }
+    const queryParams = new URLSearchParams({
+      q: currentQuery,
+      session_id: activeSessionId
+    });
+    if (activeTeamId) {
+      queryParams.append('team_id', activeTeamId);
+    }
+    if (currentParentId) {
+      queryParams.append('parent_msg_id', currentParentId);
+    }
 
-      const res = await apiFetch(`/api/query?${queryParams.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        // Clear branch reply state after successful send
-        setParentMsgId(null);
-        // Reload messages
-        await fetchMessages(activeSessionId);
-        // Refresh sessions list
-        await fetchSessions();
-        // Set new active leaf to the newly created assistant message
-        if (data.message_id) {
-          setActiveMessageId(data.message_id);
+    const token = localStorage.getItem('token');
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const abortController = new AbortController();
+
+    let assistantId = '';
+    let userId = '';
+    let currentResponseText = '';
+
+    try {
+      await fetchEventSource(`${API_BASE}/api/query/stream?${queryParams.toString()}`, {
+        method: 'GET',
+        headers,
+        signal: abortController.signal,
+        async onopen(response) {
+          if (response.ok) {
+            return;
+          }
+          let errMsg = `Server returned status ${response.status}`;
+          try {
+            const errData = await response.json();
+            errMsg = errData.detail || errMsg;
+          } catch {}
+          throw new Error(errMsg);
+        },
+        onmessage(ev) {
+          if (ev.data === '[DONE]') {
+            setSendingQuery(false);
+            fetchMessages(activeSessionId);
+            fetchSessions();
+            setParentMsgId(null);
+            abortController.abort(); // clean up the stream connection
+            return;
+          }
+
+          try {
+            const data = JSON.parse(ev.data);
+            if (data.message_id && data.user_message_id) {
+              assistantId = data.message_id;
+              userId = data.user_message_id;
+
+              const newUserMsg: Message = {
+                message_id: userId,
+                session_id: activeSessionId,
+                parent_message_id: currentParentId,
+                role: 'user',
+                content: currentQuery,
+                created_at: new Date().toISOString()
+              };
+
+              const newAssistantMsg: Message = {
+                message_id: assistantId,
+                session_id: activeSessionId,
+                parent_message_id: userId,
+                role: 'assistant',
+                content: '',
+                created_at: new Date().toISOString()
+              };
+
+              setMessages((prev) => [...prev, newUserMsg, newAssistantMsg]);
+              setActiveMessageId(assistantId);
+            } else if (data.token) {
+              currentResponseText += data.token;
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.message_id === assistantId
+                    ? { ...msg, content: currentResponseText }
+                    : msg
+                )
+              );
+            }
+          } catch (err) {
+            console.error('Error parsing SSE event:', err);
+          }
+        },
+        onerror(err) {
+          setError(err.message || 'Stream connection error');
+          setSendingQuery(false);
+          setQueryInput(currentQuery); // restore input
+          abortController.abort();
+          throw err; // prevent automatic retry by fetchEventSource
         }
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        setError(errData.detail || 'Failed to send query');
-        setQueryInput(currentQuery); // Restore query text on error
-      }
-    } catch {
-      setError('Network error sending query');
+      });
+    } catch (err: any) {
+      setError(err.message || 'Network error sending query');
       setQueryInput(currentQuery);
-    } finally {
       setSendingQuery(false);
     }
   };
@@ -259,7 +334,7 @@ function ChatInterfaceConsole() {
             {loadingTeams ? (
               <Skeleton className="h-10 w-full" />
             ) : (
-              <Select value={activeTeamId} onValueChange={handleTeamChange}>
+              <Select value={activeTeamId} onValueChange={(val) => handleTeamChange(val || '')}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select team" />
                 </SelectTrigger>
@@ -283,7 +358,7 @@ function ChatInterfaceConsole() {
               <Skeleton className="h-10 w-full" />
             ) : (
               <Select value={activeSessionId} onValueChange={(val) => {
-                setActiveSessionId(val);
+                setActiveSessionId(val || 'default-session');
                 setParentMsgId(null);
                 setActiveMessageId(null);
               }}>

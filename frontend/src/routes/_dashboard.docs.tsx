@@ -256,7 +256,7 @@ function DocumentIngestionConsole() {
           {loadingTeams ? (
             <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
           ) : (
-            <Select value={activeTeamId} onValueChange={handleTeamChange}>
+            <Select value={activeTeamId} onValueChange={(val) => handleTeamChange(val || '')}>
               <SelectTrigger id="team-select" className="w-[200px]">
                 <SelectValue placeholder="Select team..." />
               </SelectTrigger>

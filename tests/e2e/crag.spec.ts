@@ -26,11 +26,12 @@ test.describe('CRAG Web Fallback E2E Tests', () => {
 
     // Wait for query API response before checking UI
     const queryResponse = page.waitForResponse(
-      resp => resp.url().includes('/api/query') && resp.status() === 200,
+      resp => resp.url().includes('/api/query/stream') && resp.status() === 200,
       { timeout: 15000 }
     );
     await page.locator('button[type="submit"]').click();
     await queryResponse;
+    await expect(chatInput).toBeEnabled();
 
     // Verify user and assistant messages appear
     const userMsg = page.getByText('This is an irrelevant query to test web search fallback', { exact: true });

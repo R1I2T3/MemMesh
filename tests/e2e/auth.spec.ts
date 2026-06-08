@@ -15,5 +15,5 @@ test('unauthenticated user is redirected to login', async ({ browser }) => {
 
 test('authenticated user visiting landing page is redirected to dashboard', async ({ page }) => {
   await page.goto('http://localhost:5173/');
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard\/chat$/);
 });

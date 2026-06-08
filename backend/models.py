@@ -34,10 +34,14 @@ class Message(Base):
     message_id = Column(String(36), primary_key=True)
     session_id = Column(String(36), nullable=False)
     parent_message_id = Column(String(36), ForeignKey("messages.message_id"), nullable=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
-    __table_args__ = (Index('ix_messages_session_parent', 'session_id', 'parent_message_id'),)
+    created_at = Column(DateTime, server_default=func.now(), index=True)
+    __table_args__ = (
+        Index('ix_messages_session_parent', 'session_id', 'parent_message_id'),
+        Index('ix_messages_user_session', 'user_id', 'session_id'),
+    )
 
 class UserFeedback(Base):
     __tablename__ = "user_feedbacks"

@@ -3,6 +3,7 @@ from langgraph.graph import StateGraph, END
 
 class AgentState(TypedDict):
     query: str
+    history: List[Dict[str, Any]]
     rewritten_queries: List[str]
     active_team_id: str
     user_id: str
@@ -24,7 +25,10 @@ def rewrite_node(state: AgentState) -> Dict[str, Any]:
 
 def route_node(state: AgentState) -> Dict[str, Any]:
     from backend.agents.router import route_query
-    decision = route_query(state["query"])
+    query_to_route = state["query"]
+    if state.get("rewritten_queries") and len(state["rewritten_queries"]) > 0:
+        query_to_route = state["rewritten_queries"][0]
+    decision = route_query(query_to_route)
     return {"route": decision.route}
 
 def vector_retrieve_node(state: AgentState) -> Dict[str, Any]:
@@ -50,9 +54,13 @@ def web_search_node(state: AgentState) -> Dict[str, Any]:
     return {"web_search_results": [{"title": "mock web result", "snippet": "mock content"}]}
 
 def synthesize_node(state: AgentState) -> Dict[str, Any]:
-    # Mock synthesis response: combines context and generates output response using LLM
+    history_context = ""
+    if state.get("history"):
+        history_context = "\n".join(
+            f"{m['role']}: {m['content']}" for m in state["history"]
+        )
     return {
-        "raw_response": f"Mock response for query: {state['query']}",
+        "raw_response": f"Mock response for query: {state['query']}\n\n{history_context}",
         "citations": [{"source": "mock_source"}]
     }
 

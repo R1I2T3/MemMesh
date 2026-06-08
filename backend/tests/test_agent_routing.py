@@ -92,6 +92,7 @@ def test_graph_execution_hybrid_route():
         
         initial_state = {
             "query": "Who is Bob?",
+            "history": [],
             "rewritten_queries": [],
             "active_team_id": "team-abc",
             "user_id": "user-123",

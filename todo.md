@@ -25,7 +25,7 @@
 
 ## Phase 5: Query & Conversational Memory
 
-- [ ] Task 12: Redis Session Memory & LangGraph Orchestrator
+- [x] Task 12: Redis Session Memory & LangGraph Orchestrator
 - [ ] Task 13: Query API & Chat Branching UI
 
 ## Phase 6: Advanced RAG & Safety

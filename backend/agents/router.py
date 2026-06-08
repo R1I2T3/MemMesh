@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Literal
 from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -13,6 +14,8 @@ class RouteDecision(BaseModel):
     reasoning: str = Field(description="Explanation for why this route was selected.")
 
 def route_query(query: str, model_name: str = "gemini-1.5-flash") -> RouteDecision:
+    if os.environ.get("MOCK_LLM") == "true":
+        return RouteDecision(route="hybrid", reasoning="Mock route decision for E2E testing")
     try:
         # We use temperature 0 for deterministic routing decisions
         llm = ChatGoogleGenerativeAI(model=model_name, temperature=0)

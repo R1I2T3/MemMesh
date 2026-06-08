@@ -26,10 +26,12 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRY_MINUTES: int = 60
 
+    GEMINI_API_KEY: str | None = None
+
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     MAX_UPLOAD_SIZE_MB: int = 50
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=[".env", "../.env"], env_file_encoding="utf-8", extra="ignore")
 
     @property
     def cors_origin_list(self) -> list[str]:

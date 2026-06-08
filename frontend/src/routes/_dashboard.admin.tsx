@@ -16,7 +16,7 @@ export const Route = createRoute({
   beforeLoad: () => {
     const auth = getStoredAuth();
     if (!auth || auth.role !== 'superadmin') {
-      throw redirect({ to: '/dashboard' });
+      throw redirect({ to: '/dashboard/chat' });
     }
   },
   component: AdminPanelConsole,

@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import List
 from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -12,6 +13,8 @@ class QueryRewriterOutput(BaseModel):
     )
 
 def rewrite_query(query: str, model_name: str = "gemini-1.5-flash") -> List[str]:
+    if os.environ.get("MOCK_LLM") == "true":
+        return [query]
     try:
         llm = ChatGoogleGenerativeAI(model=model_name, temperature=0)
         structured_llm = llm.with_structured_output(QueryRewriterOutput)

@@ -155,3 +155,55 @@ def test_get_chat_sessions():
     data = res.json()
     assert "sess-abc" in data["sessions"]
     assert "sess-xyz" in data["sessions"]
+
+@patch("backend.api.routes.query.RedisMemory")
+@patch("backend.api.routes.query.get_graph")
+def test_query_includes_citations(mock_get_graph, mock_redis_memory_cls):
+    mock_graph = MagicMock()
+    mock_get_graph.return_value = mock_graph
+    
+    # Mock citations
+    expected_citations = [{"id": 1, "parent_id": "parent-doc-abc", "page_number": 3, "bbox": [0.1, 0.2, 0.3, 0.4]}]
+    mock_graph.invoke.return_value = {
+        "raw_response": "Here is the response answering from the docs.",
+        "citations": expected_citations
+    }
+
+    mock_redis = MagicMock()
+    mock_redis_memory_cls.return_value = mock_redis
+
+    headers = get_auth_headers()
+    res = client.get("/api/query?q=query with citations&session_id=session-cit", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["citations"] == expected_citations
+
+    # Verify stored in DB
+    db = TestingSessionLocal()
+    msg = db.query(Message).filter_by(message_id=data["message_id"]).first()
+    assert msg is not None
+    assert msg.citations == expected_citations
+
+def test_get_chat_messages_includes_citations():
+    db = TestingSessionLocal()
+    expected_citations = [{"id": 2, "parent_id": "doc-xyz", "page_number": 5, "bbox": [0.2, 0.2, 0.4, 0.4]}]
+    
+    m1 = Message(
+        message_id="m1", 
+        session_id="sess-cit-abc", 
+        parent_message_id=None, 
+        user_id="test-user", 
+        role="assistant", 
+        content="Hello citation", 
+        citations=expected_citations
+    )
+    db.add(m1)
+    db.commit()
+
+    headers = get_auth_headers()
+    res = client.get("/api/chat/messages?session_id=sess-cit-abc", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data["messages"]) == 1
+    assert data["messages"][0]["citations"] == expected_citations
+

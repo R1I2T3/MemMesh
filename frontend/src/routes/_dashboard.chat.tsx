@@ -28,6 +28,7 @@ import {
   findLatestLeaf,
   Message
 } from '../utils/query';
+import { CitationDrawer, Citation } from '../components/CitationDrawer';
 
 export const Route = createRoute({
   getParentRoute: () => dashboardRoute,
@@ -66,6 +67,76 @@ function ChatInterfaceConsole() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sendingQuery, setSendingQuery] = useState(false);
   const [error, setError] = useState('');
+
+  // Citation Drawer State
+  const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  const handleCitationClick = (citation: Citation) => {
+    setSelectedCitation(citation);
+    setIsDrawerOpen(true);
+  };
+
+  const renderMessageContent = (msg: Message) => {
+    if (msg.role !== 'assistant' || !msg.citations || msg.citations.length === 0) {
+      return <div className="whitespace-pre-wrap">{msg.content}</div>;
+    }
+
+    // Match citations like [1] or [Web 1]
+    const regex = /(\[(?:Web\s+\d+|\d+)\])/gi;
+    const parts = msg.content.split(regex);
+    if (parts.length === 1) {
+      return <div className="whitespace-pre-wrap">{msg.content}</div>;
+    }
+
+    const renderedParts: React.ReactNode[] = [];
+    for (let i = 0; i < parts.length; i++) {
+      if (i % 2 === 0) {
+        // Normal text
+        renderedParts.push(parts[i]);
+      } else {
+        // Citation tag (e.g., "[1]" or "[Web 1]")
+        const tag = parts[i];
+        const ref = tag.substring(1, tag.length - 1);
+        let targetCitation: Citation | null = null;
+
+        if (/^\d+$/.test(ref)) {
+          // Numeric citation index (1-based)
+          const idx = parseInt(ref, 10) - 1;
+          if (msg.citations && idx >= 0 && idx < msg.citations.length) {
+            targetCitation = msg.citations[idx];
+          }
+        } else {
+          // Web citation index (e.g. "Web 1" or "Web 2")
+          const match = ref.match(/Web\s+(\d+)/i);
+          if (match) {
+            const webIdx = parseInt(match[1], 10) - 1;
+            const webCitations = msg.citations.filter((c: any) => c.type === 'web' || !!c.url);
+            if (webIdx >= 0 && webIdx < webCitations.length) {
+              targetCitation = webCitations[webIdx];
+            }
+          }
+        }
+
+        if (targetCitation) {
+          renderedParts.push(
+            <button
+              key={i}
+              onClick={() => handleCitationClick(targetCitation!)}
+              className="inline-flex items-center justify-center px-1.5 py-0.5 mx-0.5 text-xs font-semibold rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-900/60 dark:hover:bg-indigo-900/50 transition-colors shadow-sm cursor-pointer align-baseline font-mono"
+              title={`View source: ${targetCitation.source || targetCitation.url || 'Document'}`}
+            >
+              {tag}
+            </button>
+          );
+        } else {
+          renderedParts.push(tag);
+        }
+      }
+    }
+
+    return <div className="whitespace-pre-wrap">{renderedParts}</div>;
+  };
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -260,7 +331,8 @@ function ChatInterfaceConsole() {
                 parent_message_id: userId,
                 role: 'assistant',
                 content: '',
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
+                citations: data.citations || []
               };
 
               setMessages((prev) => [...prev, newUserMsg, newAssistantMsg]);
@@ -501,7 +573,7 @@ function ChatInterfaceConsole() {
                           ? 'bg-indigo-600 border-indigo-500 text-white rounded-tr-none'
                           : 'bg-card border-slate-200 dark:border-slate-800 text-foreground rounded-tl-none'
                       }`}>
-                        <div className="whitespace-pre-wrap">{msg.content}</div>
+                        {renderMessageContent(msg)}
 
                         {/* Hover Action Button for Branching */}
                         <div className={`absolute top-1/2 -translate-y-1/2 flex gap-1 transition-opacity opacity-0 group-hover:opacity-100 ${
@@ -621,6 +693,11 @@ function ChatInterfaceConsole() {
           </form>
         </div>
       </Card>
+      <CitationDrawer
+        isOpen={isDrawerOpen}
+        onOpenChange={setIsDrawerOpen}
+        citation={selectedCitation}
+      />
     </div>
   );
 }

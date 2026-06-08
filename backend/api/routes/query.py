@@ -111,7 +111,8 @@ def run_query(
         parent_message_id=user_msg_id,
         user_id=user_id,
         role="assistant",
-        content=validated_response
+        content=validated_response,
+        citations=result.get("citations", [])
     )
     db.add(assistant_msg)
     
@@ -136,7 +137,8 @@ def run_query(
         "message_id": assistant_msg_id,
         "user_message_id": user_msg_id,
         "session_id": session_id,
-        "parent_message_id": user_msg_id
+        "parent_message_id": user_msg_id,
+        "citations": result.get("citations", [])
     }
 
 @router.get("/query/stream")
@@ -240,7 +242,8 @@ async def run_query_stream(
         parent_message_id=user_msg_id,
         user_id=user_id,
         role="assistant",
-        content=validated_response
+        content=validated_response,
+        citations=result.get("citations", [])
     )
     db.add(assistant_msg)
     
@@ -262,8 +265,8 @@ async def run_query_stream(
 
     # 6. Stream generator
     async def event_generator():
-        # First send metadata (IDs) so frontend knows message structure
-        yield f"data: {json.dumps({'message_id': assistant_msg_id, 'user_message_id': user_msg_id})}\n\n"
+        # First send metadata (IDs and citations) so frontend knows message structure and citations
+        yield f"data: {json.dumps({'message_id': assistant_msg_id, 'user_message_id': user_msg_id, 'citations': result.get('citations', [])})}\n\n"
         await asyncio.sleep(0.01)
 
         # Split response into tokens/words (preserving whitespace)
@@ -298,6 +301,7 @@ def get_chat_messages(
                     "parent_message_id": m.parent_message_id,
                     "role": m.role,
                     "content": m.content,
+                    "citations": m.citations,
                     "created_at": m.created_at.isoformat() if m.created_at else None
                 }
                 for m in messages

@@ -5,6 +5,7 @@ export interface Message {
   role: 'user' | 'assistant' | string;
   content: string;
   created_at: string | null;
+  citations?: any[];
 }
 
 /**

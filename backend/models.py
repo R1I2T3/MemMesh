@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, ForeignKey, Text, Integer, Index, DateTime, func
+from sqlalchemy import Column, String, ForeignKey, Text, Integer, Index, DateTime, func, JSON
 from backend.db.mysql import Base
 
 class User(Base):
@@ -37,6 +37,7 @@ class Message(Base):
     user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
+    citations = Column(JSON, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), index=True)
     __table_args__ = (
         Index('ix_messages_session_parent', 'session_id', 'parent_message_id'),

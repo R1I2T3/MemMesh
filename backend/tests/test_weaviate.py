@@ -35,6 +35,7 @@ def test_insert_chunks_batches_correctly():
             "parent_id": "p1",
             "page_number": 1,
             "bbox": [],
+            "dl_meta": "",
             "allowed_user_ids": ["user-1", "public"],
         })
 

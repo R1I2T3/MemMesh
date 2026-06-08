@@ -17,6 +17,10 @@ from langchain_core.documents import Document
 from backend.ingestion.parser import ConversionError, UnsupportedFormatError, load_documents
 from backend.tasks.ingestion_worker import process_document_task, _deterministic_id, _page_number_from_meta
 
+@pytest.fixture(autouse=True)
+def mock_neo4j_manager():
+    with patch("backend.tasks.ingestion_worker.Neo4jManager") as mock:
+        yield mock
 
 # ---------------------------------------------------------------------------
 # Helpers

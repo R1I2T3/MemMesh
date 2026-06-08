@@ -12,6 +12,7 @@ from backend.models import User
 from backend.auth.passwords import hash_password
 from backend.api.routes.auth import router as auth_router
 from backend.api.routes.admin import router as admin_router
+from backend.api.routes.upload import router as upload_router
 from backend.db.weaviate import get_weaviate_mgr, _weaviate_mgr
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(upload_router)
 
 @app.get("/api/health")
 def health(db: Session = Depends(get_db)):

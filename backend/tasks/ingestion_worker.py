@@ -39,7 +39,9 @@ from sqlalchemy.dialects.mysql import insert as mysql_insert
 
 from backend.db.mysql import SessionLocal
 from backend.db.weaviate import WeaviateManager
+from backend.db.neo4j import Neo4jManager
 from backend.ingestion.parser import ConversionError, UnsupportedFormatError, load_documents
+from backend.ingestion.extractor import extract_entities_and_relationships
 from backend.models import ParentDocument
 from backend.tasks.celery_app import celery_app
 
@@ -207,6 +209,56 @@ def process_document_task(
                 )
             finally:
                 weaviate_mgr.close()
+
+            # ----------------------------------------------------------------
+            # 4. Extract entities and relationships and write to Neo4j
+            # ----------------------------------------------------------------
+            neo4j_mgr = Neo4jManager()
+            try:
+                for doc in docs:
+                    entities, relationships = extract_entities_and_relationships(doc.page_content)
+                    # Write entities
+                    for entity in entities:
+                        if not isinstance(entity, dict):
+                            logger.warning("Extracted entity is not a dictionary: %s", entity)
+                            continue
+                        ent_id = entity.get("id")
+                        name = entity.get("name")
+                        if not ent_id or not name:
+                            logger.warning("Skipping invalid entity (missing id/name): %s", entity)
+                            continue
+                        neo4j_mgr.write_entity(
+                            team_id=team_id,
+                            entity_id=ent_id,
+                            name=name,
+                            entity_type=entity.get("type", "Concept") or "Concept",
+                            source_doc_id=parent_id
+                        )
+                    # Write relationships
+                    for rel in relationships:
+                        if not isinstance(rel, dict):
+                            logger.warning("Extracted relationship is not a dictionary: %s", rel)
+                            continue
+                        source_id = rel.get("source_id")
+                        target_id = rel.get("target_id")
+                        if not source_id or not target_id:
+                            logger.warning("Skipping invalid relationship (missing source/target): %s", rel)
+                            continue
+                        neo4j_mgr.write_relationship(
+                            team_id=team_id,
+                            source_id=source_id,
+                            target_id=target_id,
+                            rel_type=rel.get("type", "RELATES_TO") or "RELATES_TO"
+                        )
+                logger.info(
+                    "Extracted and saved knowledge graph entities/relationships to Neo4j for team '%s'",
+                    team_id,
+                )
+            except Exception as neo4j_exc:
+                logger.error("Failed writing entities to Neo4j: %s", neo4j_exc)
+                raise
+            finally:
+                neo4j_mgr.close()
 
         return parent_id
 

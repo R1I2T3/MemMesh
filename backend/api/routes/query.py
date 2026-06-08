@@ -29,7 +29,7 @@ def run_query(
         raise HTTPException(status_code=401, detail="Invalid token: missing user identifier")
 
     # 1. Safety validation
-    from backend.agents.safety import validate_query, SafetyValidationError
+    from backend.agents.safety import validate_query, validate_output, SafetyValidationError
     try:
         validated_q = validate_query(q)
     except SafetyValidationError as se:
@@ -85,6 +85,12 @@ def run_query(
 
     raw_response = result.get("raw_response", "")
 
+    # Output safety validation
+    try:
+        validated_response = validate_output(raw_response)
+    except SafetyValidationError as se:
+        raise HTTPException(status_code=400, detail=str(se))
+
     # 4. Save to database
     user_msg_id = str(uuid.uuid4())
     assistant_msg_id = str(uuid.uuid4())
@@ -105,7 +111,7 @@ def run_query(
         parent_message_id=user_msg_id,
         user_id=user_id,
         role="assistant",
-        content=raw_response
+        content=validated_response
     )
     db.add(assistant_msg)
     
@@ -121,12 +127,12 @@ def run_query(
         try:
             memory = RedisMemory()
             memory.save_message(session_id, "user", validated_q)
-            memory.save_message(session_id, "assistant", raw_response)
+            memory.save_message(session_id, "assistant", validated_response)
         except Exception as redis_err:
             logger.warning(f"Failed to save messages to Redis memory: {redis_err}")
 
     return {
-        "response": raw_response,
+        "response": validated_response,
         "message_id": assistant_msg_id,
         "user_message_id": user_msg_id,
         "session_id": session_id,
@@ -146,7 +152,8 @@ async def run_query_stream(
     import json
     import asyncio
     from fastapi.responses import StreamingResponse
-    from backend.agents.safety import validate_query, SafetyValidationError
+    from starlette.concurrency import run_in_threadpool
+    from backend.agents.safety import validate_query, validate_output, SafetyValidationError
 
     logger.debug(f"Query stream request: {q}, session_id: {session_id}, parent_msg_id: {parent_msg_id}")
     user_id = current_user.get("user_id") or current_user.get("sub")
@@ -155,7 +162,7 @@ async def run_query_stream(
 
     # 1. Safety validation
     try:
-        validated_q = validate_query(q)
+        validated_q = await run_in_threadpool(validate_query, q)
     except SafetyValidationError as se:
         raise HTTPException(status_code=400, detail=str(se))
 
@@ -184,7 +191,7 @@ async def run_query_stream(
     # 3. Invoke LangGraph orchestrator
     graph = get_graph()
     try:
-        result = graph.invoke({
+        state = {
             "query": validated_q,
             "history": history,
             "session_id": session_id,
@@ -199,12 +206,19 @@ async def run_query_stream(
             "raw_response": "",
             "citations": [],
             "relevance_pass": True
-        })
+        }
+        result = await run_in_threadpool(graph.invoke, state)
     except Exception as e:
         logger.error(f"LangGraph execution failed: {e}")
         raise HTTPException(status_code=500, detail=f"Graph execution failed: {str(e)}")
 
     raw_response = result.get("raw_response", "")
+
+    # Output safety validation
+    try:
+        validated_response = await run_in_threadpool(validate_output, raw_response)
+    except SafetyValidationError as se:
+        raise HTTPException(status_code=400, detail=str(se))
 
     # 4. Save to database
     user_msg_id = str(uuid.uuid4())
@@ -226,7 +240,7 @@ async def run_query_stream(
         parent_message_id=user_msg_id,
         user_id=user_id,
         role="assistant",
-        content=raw_response
+        content=validated_response
     )
     db.add(assistant_msg)
     
@@ -242,7 +256,7 @@ async def run_query_stream(
         try:
             memory = RedisMemory()
             memory.save_message(session_id, "user", validated_q)
-            memory.save_message(session_id, "assistant", raw_response)
+            memory.save_message(session_id, "assistant", validated_response)
         except Exception:
             pass
 
@@ -253,7 +267,7 @@ async def run_query_stream(
         await asyncio.sleep(0.01)
 
         # Split response into tokens/words (preserving whitespace)
-        tokens = re.findall(r"\S+|\s+", raw_response)
+        tokens = re.findall(r"\S+|\s+", validated_response)
         for token in tokens:
             yield f"data: {json.dumps({'token': token})}\n\n"
             await asyncio.sleep(0.01)

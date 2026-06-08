@@ -152,8 +152,16 @@ def synthesize_node(state: AgentState) -> Dict[str, Any]:
         )
 
     if os.environ.get("MOCK_LLM") == "true":
+        query_lower = state['query'].lower()
+        if "trigger unsafe response" in query_lower:
+            response = "This response is offensive and toxic."
+        elif "trigger output pii" in query_lower:
+            response = "The email address is secret.agent@gmail.com."
+        else:
+            response = f"Mock response for query: {state['query']}\n\n{history_context}".strip()
+
         return {
-            "raw_response": f"Mock response for query: {state['query']}\n\n{history_context}".strip(),
+            "raw_response": response,
             "citations": [{"source": "mock_source"}]
         }
 

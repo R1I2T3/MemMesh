@@ -104,6 +104,20 @@ class Neo4jManager:
             result = session.run(query, team_id=team_id)
             return [dict(record) for record in result]
 
+    def query_relationships(self, team_id: str, keywords: list[str]) -> list[list[str]]:
+        if not keywords:
+            return []
+        cypher_query = (
+            "MATCH (a:Entity {team_id: $team_id})-[r:RELATES_TO]->(b:Entity {team_id: $team_id}) "
+            "WHERE any(k in $keywords WHERE toLower(a.name) CONTAINS k OR toLower(b.name) CONTAINS k "
+            "OR toLower(a.id) CONTAINS k OR toLower(b.id) CONTAINS k) "
+            "RETURN a.name AS source, r.type AS type, b.name AS target "
+            "LIMIT 20"
+        )
+        with self._get_session(team_id) as session:
+            result = session.run(cypher_query, team_id=team_id, keywords=[k.lower() for k in keywords])
+            return [[record["source"], record["type"], record["target"]] for record in result]
+
     def clear_graph(self, team_id: str):
         query = "MATCH (e:Entity {team_id: $team_id}) DETACH DELETE e"
         with self._get_session(team_id) as session:

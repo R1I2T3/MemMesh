@@ -109,8 +109,8 @@ class Neo4jManager:
             return []
         cypher_query = (
             "MATCH (a:Entity {team_id: $team_id})-[r:RELATES_TO]->(b:Entity {team_id: $team_id}) "
-            "WHERE any(k in $keywords WHERE toLower(a.name) CONTAINS k OR toLower(b.name) CONTAINS k "
-            "OR toLower(a.id) CONTAINS k OR toLower(b.id) CONTAINS k) "
+            "WHERE any(k in $keywords WHERE toLower(coalesce(a.name, '')) CONTAINS k OR toLower(coalesce(b.name, '')) CONTAINS k "
+            "OR toLower(coalesce(a.id, '')) CONTAINS k OR toLower(coalesce(b.id, '')) CONTAINS k) "
             "RETURN a.name AS source, r.type AS type, b.name AS target "
             "LIMIT 20"
         )

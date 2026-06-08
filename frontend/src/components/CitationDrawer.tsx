@@ -62,9 +62,13 @@ export function CitationDrawer({ isOpen, onOpenChange, citation }: CitationDrawe
 
   const handleCopy = () => {
     if (!citation) return;
-    navigator.clipboard.writeText(citation.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(citation.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      console.warn("Clipboard API not available in this environment.");
+    }
   };
 
   if (!citation) return null;

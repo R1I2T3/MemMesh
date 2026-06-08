@@ -20,7 +20,7 @@ def validate_query(query: str) -> str:
     if os.environ.get("MOCK_LLM") == "true":
         scrubbed = query
         # Email regex
-        scrubbed = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", scrubbed)
+        scrubbed = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL]", scrubbed)
         # Phone regex
         scrubbed = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", scrubbed)
         return scrubbed
@@ -44,7 +44,7 @@ def validate_query(query: str) -> str:
         except (ImportError, Exception) as inner_err:
             # Fallback if Guardrails hub or validators fail to download models offline
             scrubbed = query
-            scrubbed = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", scrubbed)
+            scrubbed = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL]", scrubbed)
             scrubbed = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", scrubbed)
             return scrubbed
     except SafetyValidationError:
@@ -67,7 +67,7 @@ def validate_output(output: str) -> str:
     if os.environ.get("MOCK_LLM") == "true":
         scrubbed = output
         # Email regex
-        scrubbed = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", scrubbed)
+        scrubbed = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL]", scrubbed)
         # Phone regex
         scrubbed = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", scrubbed)
         return scrubbed
@@ -89,7 +89,7 @@ def validate_output(output: str) -> str:
         except (ImportError, Exception):
             # Fallback if Guardrails hub or validators fail to download models offline
             scrubbed = output
-            scrubbed = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", scrubbed)
+            scrubbed = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL]", scrubbed)
             scrubbed = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", scrubbed)
             return scrubbed
     except SafetyValidationError:

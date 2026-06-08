@@ -62,7 +62,10 @@ def test_rewriter_exception_fallback():
 
 def test_graph_execution_hybrid_route():
     with patch("backend.agents.router.ChatGoogleGenerativeAI") as mock_router_llm_cls, \
-         patch("backend.agents.rewriter.ChatGoogleGenerativeAI") as mock_rewriter_llm_cls:
+         patch("backend.agents.rewriter.ChatGoogleGenerativeAI") as mock_rewriter_llm_cls, \
+         patch("backend.agents.retriever.retrieve_parent_documents") as mock_retrieve:
+        
+        mock_retrieve.return_value = [{"text": "mock hybrid chunk", "score": 0.8}]
         
         # Setup rewriter mock
         mock_rewriter_llm = MagicMock()

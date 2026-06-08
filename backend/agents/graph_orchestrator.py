@@ -32,26 +32,64 @@ def route_node(state: AgentState) -> Dict[str, Any]:
     return {"route": decision.route}
 
 def vector_retrieve_node(state: AgentState) -> Dict[str, Any]:
-    # Mock retrieval: in future tasks, this will perform vector search using Weaviate
-    return {"retrieved_chunks": [{"text": "mock vector chunk", "score": 0.9}]}
+    import os
+    if os.environ.get("MOCK_LLM") == "true":
+        return {"retrieved_chunks": [{"text": "mock vector chunk", "score": 0.9}]}
+    
+    from backend.db.weaviate import get_weaviate_mgr
+    from backend.agents.retriever import retrieve_parent_documents
+    
+    weaviate_mgr = get_weaviate_mgr()
+    query_to_use = state["query"]
+    if state.get("rewritten_queries") and len(state["rewritten_queries"]) > 0:
+        query_to_use = state["rewritten_queries"][0]
+        
+    chunks = retrieve_parent_documents(
+        weaviate_mgr=weaviate_mgr,
+        tenant_id=state["active_team_id"],
+        query=query_to_use,
+        current_user_id=state["user_id"]
+    )
+    return {"retrieved_chunks": chunks}
 
 def graph_retrieve_node(state: AgentState) -> Dict[str, Any]:
     # Mock retrieval: in future tasks, this will query Neo4j for entities and relations
     return {"retrieved_triples": [["MockSubject", "MockPredicate", "MockObject"]]}
 
 def hybrid_retrieve_node(state: AgentState) -> Dict[str, Any]:
-    # Mock retrieval: in future tasks, this will run both vector and graph retrieval and combine them
+    import os
+    if os.environ.get("MOCK_LLM") == "true":
+        return {
+            "retrieved_chunks": [{"text": "mock hybrid chunk", "score": 0.8}],
+            "retrieved_triples": [["MockSubject", "MockPredicate", "MockObject"]]
+        }
+    
+    from backend.db.weaviate import get_weaviate_mgr
+    from backend.agents.retriever import retrieve_parent_documents
+    
+    weaviate_mgr = get_weaviate_mgr()
+    query_to_use = state["query"]
+    if state.get("rewritten_queries") and len(state["rewritten_queries"]) > 0:
+        query_to_use = state["rewritten_queries"][0]
+        
+    chunks = retrieve_parent_documents(
+        weaviate_mgr=weaviate_mgr,
+        tenant_id=state["active_team_id"],
+        query=query_to_use,
+        current_user_id=state["user_id"]
+    )
     return {
-        "retrieved_chunks": [{"text": "mock hybrid chunk", "score": 0.8}],
+        "retrieved_chunks": chunks,
         "retrieved_triples": [["MockSubject", "MockPredicate", "MockObject"]]
     }
 
 def crag_check_node(state: AgentState) -> Dict[str, Any]:
-    # Mock relevance check, defaults to True for test simplicity
-    return {"relevance_pass": True}
+    from backend.agents.crag import evaluate_retrieval
+    return evaluate_retrieval(state)
 
 def web_search_node(state: AgentState) -> Dict[str, Any]:
-    return {"web_search_results": [{"title": "mock web result", "snippet": "mock content"}]}
+    from backend.agents.web_search import web_search_fallback
+    return web_search_fallback(state)
 
 def synthesize_node(state: AgentState) -> Dict[str, Any]:
     history_context = ""

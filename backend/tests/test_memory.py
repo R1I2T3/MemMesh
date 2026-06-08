@@ -29,31 +29,37 @@ def test_save_message_uses_rpush():
     with patch("backend.agents.memory.redis.from_url") as mock_from_url:
         mock_client = MagicMock()
         mock_from_url.return_value = mock_client
+        mock_pipe = MagicMock()
+        mock_client.pipeline.return_value = mock_pipe
         
         mem = RedisMemory()
         mem.save_message("session-123", "user", "hello")
         
-        mock_client.rpush.assert_called_once_with(
+        mock_pipe.rpush.assert_called_once_with(
             "chat_history:session-123",
             json.dumps({"role": "user", "content": "hello"})
         )
-        mock_client.lpush.assert_not_called()
+        mock_pipe.lpush.assert_not_called()
 
 def test_ttl_is_set_on_save():
     """Verify session keys get a TTL to prevent unbounded Redis memory."""
     with patch("backend.agents.memory.redis.from_url") as mock_from_url:
         mock_client = MagicMock()
         mock_from_url.return_value = mock_client
+        mock_pipe = MagicMock()
+        mock_client.pipeline.return_value = mock_pipe
         
         mem = RedisMemory()
         mem.save_message("session-123", "user", "hello")
         
-        mock_client.expire.assert_called_once_with(
+        mock_pipe.expire.assert_called_once_with(
             "chat_history:session-123",
             RedisMemory.SESSION_TTL
         )
-        mock_client.ltrim.assert_called_once_with(
+        mock_pipe.ltrim.assert_called_once_with(
             "chat_history:session-123",
             -RedisMemory.MAX_LENGTH,
             -1
         )
+        mock_pipe.execute.assert_called_once()
+

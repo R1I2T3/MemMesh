@@ -16,6 +16,9 @@ class RedisMemory:
 
     def save_message(self, session_id: str, role: str, content: str):
         key = f"chat_history:{session_id}"
-        self.client.rpush(key, json.dumps({"role": role, "content": content}))
-        self.client.ltrim(key, -self.MAX_LENGTH, -1)
-        self.client.expire(key, self.SESSION_TTL)
+        pipe = self.client.pipeline()
+        pipe.rpush(key, json.dumps({"role": role, "content": content}))
+        pipe.ltrim(key, -self.MAX_LENGTH, -1)
+        pipe.expire(key, self.SESSION_TTL)
+        pipe.execute()
+

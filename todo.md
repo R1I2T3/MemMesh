@@ -30,7 +30,7 @@
 
 ## Phase 6: Advanced RAG & Safety
 
-- [ ] Task 14: Hybrid Search, ACL Filters & CRAG Web Fallback
+- [x] Task 14: Hybrid Search, ACL Filters & CRAG Web Fallback
 - [ ] Task 15: Guardrails AI Validation & SSE Streaming
 
 ## Phase 7: Citations & Feedback

@@ -1,6 +1,14 @@
 import json
+import pytest
 from unittest.mock import patch, MagicMock
 from backend.agents.memory import RedisMemory
+import backend.agents.memory
+
+@pytest.fixture(autouse=True)
+def reset_redis_client():
+    backend.agents.memory._redis_client = None
+    yield
+    backend.agents.memory._redis_client = None
 
 def test_chat_history_ordering():
     """Verify messages are returned in chronological order (oldest first)."""

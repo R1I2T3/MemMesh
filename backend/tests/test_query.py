@@ -92,6 +92,7 @@ def test_branching_query_flow(mock_get_graph, mock_redis_memory_cls):
         message_id="parent-msg-123",
         session_id="session-123",
         parent_message_id=None,
+        user_id="test-user",
         role="assistant",
         content="This is parent content"
     )
@@ -127,9 +128,9 @@ def test_branching_query_flow(mock_get_graph, mock_redis_memory_cls):
 
 def test_get_chat_messages():
     db = TestingSessionLocal()
-    m1 = Message(message_id="m1", session_id="sess-abc", parent_message_id=None, role="user", content="msg 1")
-    m2 = Message(message_id="m2", session_id="sess-abc", parent_message_id="m1", role="assistant", content="msg 2")
-    m3 = Message(message_id="m3", session_id="sess-other", parent_message_id=None, role="user", content="other msg")
+    m1 = Message(message_id="m1", session_id="sess-abc", parent_message_id=None, user_id="test-user", role="user", content="msg 1")
+    m2 = Message(message_id="m2", session_id="sess-abc", parent_message_id="m1", user_id="test-user", role="assistant", content="msg 2")
+    m3 = Message(message_id="m3", session_id="sess-other", parent_message_id=None, user_id="test-user", role="user", content="other msg")
     db.add_all([m1, m2, m3])
     db.commit()
 
@@ -143,8 +144,8 @@ def test_get_chat_messages():
 
 def test_get_chat_sessions():
     db = TestingSessionLocal()
-    m1 = Message(message_id="m1", session_id="sess-abc", parent_message_id=None, role="user", content="msg 1")
-    m2 = Message(message_id="m2", session_id="sess-xyz", parent_message_id=None, role="user", content="msg 2")
+    m1 = Message(message_id="m1", session_id="sess-abc", parent_message_id=None, user_id="test-user", role="user", content="msg 1")
+    m2 = Message(message_id="m2", session_id="sess-xyz", parent_message_id=None, user_id="test-user", role="user", content="msg 2")
     db.add_all([m1, m2])
     db.commit()
 

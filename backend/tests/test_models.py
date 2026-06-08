@@ -60,10 +60,13 @@ def test_message_tree_structure():
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
     with Session() as session:
+        user_id = str(uuid.uuid4())
         parent_id = str(uuid.uuid4())
         child_id = str(uuid.uuid4())
-        session.add(Message(message_id=parent_id, session_id="s1", parent_message_id=None, role="user", content="Hello"))
-        session.add(Message(message_id=child_id, session_id="s1", parent_message_id=parent_id, role="assistant", content="Hi"))
+        session.add(User(user_id=user_id, email="test@test.com", password_hash="hash"))
+        session.commit()
+        session.add(Message(message_id=parent_id, session_id="s1", parent_message_id=None, user_id=user_id, role="user", content="Hello"))
+        session.add(Message(message_id=child_id, session_id="s1", parent_message_id=parent_id, user_id=user_id, role="assistant", content="Hi"))
         session.commit()
         child = session.query(Message).filter_by(message_id=child_id).first()
         assert child.parent_message_id == parent_id

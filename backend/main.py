@@ -26,6 +26,13 @@ from backend.db import weaviate as weaviate_db
 
 logger = logging.getLogger(__name__)
 
+try:
+    from openinference.instrumentation.langchain import LangChainInstrumentor
+    LangChainInstrumentor().instrument()
+except ImportError:
+    logger.warning("Phoenix tracing not available")
+
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

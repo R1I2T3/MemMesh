@@ -12,7 +12,7 @@ class QueryRewriterOutput(BaseModel):
         description="A list of 2-3 rewritten queries, including variants or step-back queries, to improve retrieval performance."
     )
 
-def rewrite_query(query: str, model_name: str = "gemini-1.5-flash") -> List[str]:
+def rewrite_query(query: str, model_name: str = "gemini-2.5-flash") -> List[str]:
     if os.environ.get("MOCK_LLM") == "true":
         return [query]
     try:

@@ -13,7 +13,7 @@ class RouteDecision(BaseModel):
     )
     reasoning: str = Field(description="Explanation for why this route was selected.")
 
-def route_query(query: str, model_name: str = "gemini-1.5-flash") -> RouteDecision:
+def route_query(query: str, model_name: str = "gemini-2.5-flash") -> RouteDecision:
     if os.environ.get("MOCK_LLM") == "true":
         return RouteDecision(route="hybrid", reasoning="Mock route decision for E2E testing")
     try:

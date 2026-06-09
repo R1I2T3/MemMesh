@@ -28,7 +28,7 @@ def evaluate_retrieval(state: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         # Create LLM client with structured output
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
         structured_llm = llm.with_structured_output(RelevanceGrade)
         
         prompt = ChatPromptTemplate.from_template(

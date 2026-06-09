@@ -1,7 +1,8 @@
-import os
 import re
 import json
 import logging
+
+from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ def extract_heuristic(text: str) -> tuple[list[dict], list[dict]]:
     return entities, relationships
 
 def extract_entities_and_relationships(text: str) -> tuple[list[dict], list[dict]]:
-    api_key = os.environ.get("GEMINI_API_KEY")
+    api_key = settings.GEMINI_API_KEY
     if not api_key or "placeholder" in api_key.lower() or api_key in ("mock", "test"):
         logger.info("Using heuristic extraction (Gemini API key missing/mock)")
         return extract_heuristic(text)
@@ -54,7 +55,7 @@ def extract_entities_and_relationships(text: str) -> tuple[list[dict], list[dict
     try:
         from langchain_google_genai import ChatGoogleGenerativeAI
         # Initialize LLM with Gemini
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=api_key)
         prompt = (
             "Extract entities and relations from the following text.\n"
             "Respond ONLY with a valid JSON block containing "

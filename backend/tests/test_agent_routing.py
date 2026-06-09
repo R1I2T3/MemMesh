@@ -21,7 +21,7 @@ def test_router_output():
         res = route_query("How is Alice connected to Bob?")
         assert res.route == "graph"
         assert res.reasoning == "Relational query request"
-        mock_llm_cls.assert_called_once_with(model="gemini-1.5-flash", temperature=0)
+        mock_llm_cls.assert_called_once_with(model="gemini-2.5-flash", temperature=0)
 
 def test_router_exception_fallback():
     with patch("backend.agents.router.ChatGoogleGenerativeAI") as mock_llm_cls:

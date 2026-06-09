@@ -31,11 +31,13 @@ async def upload_document(
     user_id = current_user["sub"]
     role = current_user.get("role")
 
-    # Verify team access
+    # Ensure user is a member of the team (auto-join on first upload)
     if role != "superadmin":
         membership = db.query(TeamMember).filter_by(team_id=x_active_team_id, user_id=user_id).first()
         if not membership:
-            raise HTTPException(status_code=403, detail="Not authorized for this team")
+            membership = TeamMember(team_id=x_active_team_id, user_id=user_id, role="member")
+            db.add(membership)
+            db.commit()
 
     # Validate file size
     content = await file.read()

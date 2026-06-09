@@ -1,5 +1,4 @@
 import sys
-import os
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -9,13 +8,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from backend.db.mysql import get_db, SessionLocal
 from backend.config import settings
-
-if settings.GEMINI_API_KEY:
-    os.environ["GEMINI_API_KEY"] = settings.GEMINI_API_KEY
 from backend.models import User
 from backend.auth.passwords import hash_password
 from backend.api.routes.auth import router as auth_router
-from backend.api.routes.admin import router as admin_router
+from backend.api.routes.admin import admin_router, user_router
 from backend.api.routes.upload import router as upload_router
 from backend.api.routes.query import router as query_router
 from backend.db.weaviate import get_weaviate_mgr, _weaviate_mgr
@@ -82,6 +78,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(user_router)
 app.include_router(admin_router)
 app.include_router(upload_router)
 app.include_router(query_router)

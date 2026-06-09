@@ -55,7 +55,7 @@ def extract_entities_and_relationships(text: str) -> tuple[list[dict], list[dict
     try:
         from langchain_google_genai import ChatGoogleGenerativeAI
         # Initialize LLM with Gemini
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=api_key)
+        llm = ChatGoogleGenerativeAI(model=settings.GEMINI_MODEL, google_api_key=api_key)
         prompt = (
             "Extract entities and relations from the following text.\n"
             "Respond ONLY with a valid JSON block containing "

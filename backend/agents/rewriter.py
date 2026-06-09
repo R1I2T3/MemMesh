@@ -12,7 +12,10 @@ class QueryRewriterOutput(BaseModel):
         description="A list of 2-3 rewritten queries, including variants or step-back queries, to improve retrieval performance."
     )
 
-def rewrite_query(query: str, model_name: str = "gemini-2.5-flash") -> List[str]:
+def rewrite_query(query: str, model_name: str | None = None) -> List[str]:
+    from backend.config import settings
+    if model_name is None:
+        model_name = settings.GEMINI_MODEL
     if os.environ.get("MOCK_LLM") == "true":
         return [query]
     try:

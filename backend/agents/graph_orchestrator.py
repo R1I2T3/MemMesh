@@ -213,7 +213,8 @@ def synthesize_node(state: AgentState) -> Dict[str, Any]:
     ])
     
     try:
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.3)
+        from backend.config import settings
+        llm = ChatGoogleGenerativeAI(model=settings.GEMINI_MODEL, temperature=0.3)
         chain = prompt_template | llm
         response = chain.invoke({
             "context_docs": chunks_str or "No documents retrieved.",

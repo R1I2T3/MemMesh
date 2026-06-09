@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     JWT_EXPIRY_MINUTES: int = 60
 
     GEMINI_API_KEY: str | None = None
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     MAX_UPLOAD_SIZE_MB: int = 50

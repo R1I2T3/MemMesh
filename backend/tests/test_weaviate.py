@@ -9,7 +9,10 @@ def test_weaviate_manager_init():
         assert manager.client is not None
 
 def test_insert_chunks_batches_correctly():
-    with patch('backend.db.weaviate.weaviate.connect_to_local') as mock_connect:
+    with patch('backend.db.weaviate.weaviate.connect_to_local') as mock_connect, \
+         patch('backend.db.weaviate.WeaviateManager._get_embedding') as mock_get_embedding:
+        
+        mock_get_embedding.return_value = [0.1, 0.2, 0.3]
         mock_client = MagicMock()
         mock_connect.return_value = mock_client
         manager = WeaviateManager()
@@ -30,14 +33,18 @@ def test_insert_chunks_batches_correctly():
         assert mock_batch.add_object.call_count == 5
         
         # Verify first call arguments
-        mock_batch.add_object.assert_any_call(properties={
-            "text": "chunk 0",
-            "parent_id": "p1",
-            "page_number": 1,
-            "bbox": [],
-            "dl_meta": "",
-            "allowed_user_ids": ["user-1", "public"],
-        })
+        mock_batch.add_object.assert_any_call(
+            vector=[0.1, 0.2, 0.3],
+            properties={
+                "text": "chunk 0",
+                "parent_id": "p1",
+                "page_number": 1,
+                "bbox": [],
+                "dl_meta": "",
+                "allowed_user_ids": ["user-1", "public"],
+                "importance_score": 1.0,
+            }
+        )
 
 def test_ensure_schema():
     with patch('backend.db.weaviate.weaviate.connect_to_local') as mock_connect:

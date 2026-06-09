@@ -38,6 +38,7 @@ class WeaviateManager:
                 Property(name="bbox", data_type=DataType.NUMBER_ARRAY),
                 Property(name="dl_meta", data_type=DataType.TEXT),
                 Property(name="allowed_user_ids", data_type=DataType.TEXT_ARRAY),
+                Property(name="importance_score", data_type=DataType.NUMBER),
             ],
         )
         logger.info(f"Created collection {COLLECTION_NAME} with multi-tenancy")
@@ -69,6 +70,7 @@ class WeaviateManager:
                         "bbox": chunk.get("bbox", []),
                         "dl_meta": chunk.get("dl_meta", ""),
                         "allowed_user_ids": allowed_users,
+                        "importance_score": 1.0,
                     },
                 )
 

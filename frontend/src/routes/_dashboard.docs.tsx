@@ -77,6 +77,111 @@ function DocumentIngestionConsole() {
   const auth = getStoredAuth();
   const isSuperAdmin = auth?.role === 'superadmin';
 
+  // System Hardening & Optimization States
+  const [decayTaskId, setDecayTaskId] = useState('');
+  const [decayStatus, setDecayStatus] = useState('');
+  const [decayLoading, setDecayLoading] = useState(false);
+  const [decayResult, setDecayResult] = useState<any>(null);
+
+  const [driftTaskId, setDriftTaskId] = useState('');
+  const [driftStatus, setDriftStatus] = useState('');
+  const [driftLoading, setDriftLoading] = useState(false);
+  const [driftResult, setDriftResult] = useState<any>(null);
+
+  const [hardeningError, setHardeningError] = useState('');
+
+  const runDecay = async () => {
+    setDecayLoading(true);
+    setDecayTaskId('');
+    setDecayStatus('PENDING');
+    setDecayResult(null);
+    setHardeningError('');
+    try {
+      const res = await apiFetch('/api/decay/trigger', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setDecayTaskId(data.task_id);
+        setDecayStatus('TRIGGERED');
+      } else {
+        const err = await res.json().catch(() => ({ detail: 'Failed to trigger decay' }));
+        setHardeningError(err.detail || 'Failed to trigger decay');
+        setDecayStatus('FAILED');
+      }
+    } catch {
+      setHardeningError('Network error during memory decay trigger');
+      setDecayStatus('FAILED');
+    } finally {
+      setDecayLoading(false);
+    }
+  };
+
+  const runDrift = async () => {
+    setDriftLoading(true);
+    setDriftTaskId('');
+    setDriftStatus('PENDING');
+    setDriftResult(null);
+    setHardeningError('');
+    try {
+      const res = await apiFetch('/api/drift/trigger', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setDriftTaskId(data.task_id);
+        setDriftStatus('TRIGGERED');
+      } else {
+        const err = await res.json().catch(() => ({ detail: 'Failed to trigger drift' }));
+        setHardeningError(err.detail || 'Failed to trigger drift');
+        setDriftStatus('FAILED');
+      }
+    } catch {
+      setHardeningError('Network error during drift detection trigger');
+      setDriftStatus('FAILED');
+    } finally {
+      setDriftLoading(false);
+    }
+  };
+
+  // Poll memory decay task status
+  useEffect(() => {
+    if (!decayTaskId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await apiFetch(`/api/decay/status/${decayTaskId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setDecayStatus(data.status);
+          if (data.status === 'SUCCESS' || data.status === 'FAILURE') {
+            setDecayResult(data.result);
+            clearInterval(interval);
+          }
+        }
+      } catch {
+        // ignore transient fetch error
+      }
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [decayTaskId]);
+
+  // Poll drift detection task status
+  useEffect(() => {
+    if (!driftTaskId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await apiFetch(`/api/decay/status/${driftTaskId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setDriftStatus(data.status);
+          if (data.status === 'SUCCESS' || data.status === 'FAILURE') {
+            setDriftResult(data.result);
+            clearInterval(interval);
+          }
+        }
+      } catch {
+        // ignore transient fetch error
+      }
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [driftTaskId]);
+
   const runEvaluation = async () => {
     setRunningEval(true);
     setEvalResults(null);
@@ -503,6 +608,89 @@ function DocumentIngestionConsole() {
                 )}
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* System Hardening & Optimization Card (Superadmin only) */}
+      {isSuperAdmin && (
+        <Card className="border-border bg-card" id="system-hardening-card">
+          <CardHeader>
+            <CardTitle className="text-lg">System Hardening & Optimization</CardTitle>
+            <CardDescription>
+              Trigger maintenance tasks manually to keep the vector databases and graph databases pruned and monitor query drifts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {hardeningError && <AlertBanner type="error" message={hardeningError} />}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Memory Decay Section */}
+              <div className="p-4 border rounded-lg bg-background flex flex-col gap-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-semibold text-sm">Memory Decay Weighting</h4>
+                    <p className="text-xs text-muted-foreground">Prunes low-importance graph entities and scales Weaviate weights.</p>
+                  </div>
+                  <Button
+                    id="trigger-decay-btn"
+                    onClick={runDecay}
+                    disabled={decayLoading || (decayStatus !== '' && decayStatus !== 'SUCCESS' && decayStatus !== 'FAILED')}
+                    size="sm"
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+                  >
+                    {decayLoading ? <Loader2Icon className="size-4 animate-spin" /> : "Trigger Decay"}
+                  </Button>
+                </div>
+                {decayTaskId && (
+                  <div className="text-xs space-y-1 bg-muted p-2 rounded">
+                    <div><span className="font-semibold">Task ID:</span> <span id="decay-task-id">{decayTaskId}</span></div>
+                    <div><span className="font-semibold">Status:</span> <span id="decay-task-status" className="font-mono">{decayStatus}</span></div>
+                    {decayResult && (
+                      <div id="decay-result-content">
+                        <span className="font-semibold">Processed:</span> {decayResult.processed_teams} team(s)
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Drift Detection Section */}
+              <div className="p-4 border rounded-lg bg-background flex flex-col gap-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-semibold text-sm">Semantic Drift Detection</h4>
+                    <p className="text-xs text-muted-foreground">Analyzes query statistics and ratings to evaluate domain changes.</p>
+                  </div>
+                  <Button
+                    id="trigger-drift-btn"
+                    onClick={runDrift}
+                    disabled={driftLoading || (driftStatus !== '' && driftStatus !== 'SUCCESS' && driftStatus !== 'FAILED')}
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                  >
+                    {driftLoading ? <Loader2Icon className="size-4 animate-spin" /> : "Trigger Drift"}
+                  </Button>
+                </div>
+                {driftTaskId && (
+                  <div className="text-xs space-y-1 bg-muted p-2 rounded">
+                    <div><span className="font-semibold">Task ID:</span> <span id="drift-task-id">{driftTaskId}</span></div>
+                    <div><span className="font-semibold">Status:</span> <span id="drift-task-status" className="font-mono">{driftStatus}</span></div>
+                    {driftResult && (
+                      <div id="drift-result-content" className="space-y-1">
+                        <div><span className="font-semibold">Drift Detected:</span> <span className={driftResult.drift_detected ? "text-destructive font-bold" : "text-emerald-500 font-bold"}>{driftResult.drift_detected ? "Yes" : "No"}</span></div>
+                        {driftResult.metrics && (
+                          <div className="grid grid-cols-2 gap-1 text-[10px] text-muted-foreground">
+                            <div>Avg Len: {driftResult.metrics.avg_length_last?.toFixed(1)} vs {driftResult.metrics.avg_length_prev?.toFixed(1)}</div>
+                            <div>Avg Rating: {driftResult.metrics.avg_rating_last?.toFixed(1)} vs {driftResult.metrics.avg_rating_prev?.toFixed(1)}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

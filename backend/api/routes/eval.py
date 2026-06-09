@@ -24,26 +24,34 @@ def run_evaluation(
     # Try importing deepeval outside of loop or checking if in pytest
     is_pytest = "pytest" in sys.modules
 
+    faithfulness_metric = None
+    relevancy_metric = None
+    LLMTestCase_class = None
+
+    if not is_pytest:
+        try:
+            from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric
+            from deepeval.test_case import LLMTestCase
+            LLMTestCase_class = LLMTestCase
+            faithfulness_metric = FaithfulnessMetric(threshold=0.5)
+            relevancy_metric = AnswerRelevancyMetric(threshold=0.5)
+        except Exception as e:
+            logger.warning(f"Failed to initialize DeepEval metrics: {e}")
+
     for fb in feedbacks:
         faithfulness_score = 0.85
         relevancy_score = 0.90
         reason = "Mocked due to environment (pytest or missing keys)"
         
-        if not is_pytest:
+        if not is_pytest and faithfulness_metric and relevancy_metric and LLMTestCase_class:
             try:
-                from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric
-                from deepeval.test_case import LLMTestCase
-                
                 # Setup metrics
                 # We supply the query as context, since we don't have retrieval context stored.
-                test_case = LLMTestCase(
+                test_case = LLMTestCase_class(
                     input=fb.query,
                     actual_output=fb.response,
                     retrieval_context=[fb.query]
                 )
-                
-                faithfulness_metric = FaithfulnessMetric(threshold=0.5)
-                relevancy_metric = AnswerRelevancyMetric(threshold=0.5)
                 
                 # Measure faithfulness
                 faithfulness_metric.measure(test_case)
@@ -59,7 +67,10 @@ def run_evaluation(
                 # keep default mock values
                 reason = f"Mocked due to execution failure: {str(e)}"
         else:
-            logger.warning(f"Pytest detected. Mocking DeepEval execution for feedback {fb.feedback_id}.")
+            if is_pytest:
+                logger.warning(f"Pytest detected. Mocking DeepEval execution for feedback {fb.feedback_id}.")
+            else:
+                logger.warning(f"DeepEval metrics not initialized. Mocking DeepEval execution for feedback {fb.feedback_id}.")
 
         results.append({
             "feedback_id": fb.feedback_id,

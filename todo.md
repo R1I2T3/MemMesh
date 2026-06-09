@@ -41,5 +41,5 @@
 ## Phase 8: Production Hardening
 
 - [x] Task 18: Error Handling, Logging, Health Checks & ErrorBoundary
-- [ ] Task 19: Celery Background Jobs (Memory Decay & Drift Detection)
+- [x] Task 19: Celery Background Jobs (Memory Decay & Drift Detection)
 - [ ] Task 20: Arize Phoenix Tracing, Makefile & Full E2E Audit

@@ -5,6 +5,8 @@ from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
+_neo4j_mgr = None
+
 class Neo4jManager:
     _multidb_supported: bool | None = None
 
@@ -13,6 +15,8 @@ class Neo4jManager:
             settings.NEO4J_URI,
             auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD)
         )
+        global _neo4j_mgr
+        _neo4j_mgr = self
 
     def close(self):
         self.driver.close()

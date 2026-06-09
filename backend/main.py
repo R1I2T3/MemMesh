@@ -1,3 +1,7 @@
+from backend.middleware.logging_config import setup_logging
+# Initialize logging as early as possible
+setup_logging()
+
 import sys
 import logging
 import uuid
@@ -29,6 +33,7 @@ async def lifespan(app: FastAPI):
     try:
         weaviate_mgr = get_weaviate_mgr()
         weaviate_mgr.ensure_schema()
+        logger.info("Weaviate schema initialized successfully.")
     except Exception as e:
         logger.error(f"Failed to initialize Weaviate schema (Weaviate might be offline): {e}")
 
@@ -63,13 +68,43 @@ async def lifespan(app: FastAPI):
     # Close Weaviate client on shutdown
     try:
         if _weaviate_mgr is not None:
+            logger.info("Closing Weaviate client...")
             _weaviate_mgr.close()
     except Exception as e:
         logger.error(f"Error closing Weaviate client: {e}")
+
+    # Close Neo4j driver on shutdown
+    try:
+        from backend.db.neo4j import _neo4j_mgr
+        if _neo4j_mgr is not None:
+            logger.info("Closing Neo4j driver...")
+            _neo4j_mgr.close()
+    except Exception as e:
+        logger.error(f"Error closing Neo4j driver: {e}")
+
+    # Close Redis client on shutdown
+    try:
+        from backend.agents.memory import _redis_client
+        if _redis_client is not None:
+            logger.info("Closing Redis client...")
+            _redis_client.close()
+    except Exception as e:
+        logger.error(f"Error closing Redis client: {e}")
         
     logger.info("MemMesh shutting down...")
 
 app = FastAPI(title="MemMesh API", version="0.1.0", lifespan=lifespan)
+
+from backend.middleware.error_handler import (
+    global_exception_handler,
+    http_exception_handler,
+    validation_exception_handler
+)
+from fastapi.exceptions import RequestValidationError, HTTPException
+
+app.add_exception_handler(Exception, global_exception_handler)
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -90,11 +125,51 @@ app.include_router(eval_router)
 @app.get("/api/health")
 def health(db: Session = Depends(get_db)):
     statuses = {}
+    
+    # 1. MySQL check
     try:
         db.execute(text("SELECT 1"))
         statuses["mysql"] = "ok"
     except Exception as e:
         logger.error(f"MySQL health check failed: {e}")
         statuses["mysql"] = "error"
-    # For Task 2, we just check mysql; we will add other checks in Task 18.
-    return {"status": "ok" if all(v == "ok" for v in statuses.values()) else "degraded", "services": statuses}
+        
+    # 2. Redis check
+    try:
+        from backend.agents.memory import get_redis_client
+        redis_client = get_redis_client()
+        if redis_client.ping():
+            statuses["redis"] = "ok"
+        else:
+            statuses["redis"] = "error"
+    except Exception as e:
+        logger.error(f"Redis health check failed: {e}")
+        statuses["redis"] = "error"
+        
+    # 3. Weaviate check
+    try:
+        from backend.db.weaviate import get_weaviate_mgr
+        weaviate_mgr = get_weaviate_mgr()
+        if weaviate_mgr.client.is_live():
+            statuses["weaviate"] = "ok"
+        else:
+            statuses["weaviate"] = "error"
+    except Exception as e:
+        logger.error(f"Weaviate health check failed: {e}")
+        statuses["weaviate"] = "error"
+        
+    # 4. Neo4j check
+    try:
+        from backend.db.neo4j import Neo4jManager
+        neo4j_mgr = Neo4jManager()
+        try:
+            neo4j_mgr.driver.verify_connectivity()
+            statuses["neo4j"] = "ok"
+        finally:
+            neo4j_mgr.close()
+    except Exception as e:
+        logger.error(f"Neo4j health check failed: {e}")
+        statuses["neo4j"] = "error"
+        
+    overall = "ok" if all(v == "ok" for v in statuses.values()) else "degraded"
+    return {"status": overall, "services": statuses}

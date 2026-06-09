@@ -5,7 +5,7 @@ def setup_logging(level: str = "INFO"):
     # Configure handler with custom format
     formatter = logging.Formatter(
         fmt="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %Y %H:%M:%S",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
     
     root_logger = logging.getLogger()

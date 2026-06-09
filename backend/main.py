@@ -20,7 +20,8 @@ from backend.api.routes.upload import router as upload_router
 from backend.api.routes.query import router as query_router
 from backend.api.routes.feedback import router as feedback_router
 from backend.api.routes.eval import router as eval_router
-from backend.db.weaviate import get_weaviate_mgr, _weaviate_mgr
+from backend.db.weaviate import get_weaviate_mgr
+from backend.db import weaviate as weaviate_db
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +68,9 @@ async def lifespan(app: FastAPI):
     
     # Close Weaviate client on shutdown
     try:
-        if _weaviate_mgr is not None:
+        if weaviate_db._weaviate_mgr is not None:
             logger.info("Closing Weaviate client...")
-            _weaviate_mgr.close()
+            weaviate_db._weaviate_mgr.close()
     except Exception as e:
         logger.error(f"Error closing Weaviate client: {e}")
 
@@ -101,9 +102,11 @@ from backend.middleware.error_handler import (
     validation_exception_handler
 )
 from fastapi.exceptions import RequestValidationError, HTTPException
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 app.add_exception_handler(Exception, global_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 app.add_middleware(

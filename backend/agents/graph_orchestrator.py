@@ -1,4 +1,5 @@
-from typing import TypedDict, List, Dict, Any
+import asyncio
+from typing import TypedDict, List, Dict, Any, AsyncGenerator
 from langgraph.graph import StateGraph, END
 
 class AgentState(TypedDict):
@@ -143,7 +144,7 @@ def web_search_node(state: AgentState) -> Dict[str, Any]:
     from backend.agents.web_search import web_search_fallback
     return web_search_fallback(state)
 
-def synthesize_node(state: AgentState) -> Dict[str, Any]:
+async def synthesize_node(state: AgentState) -> Dict[str, Any]:
     import os
     history_context = ""
     if state.get("history"):
@@ -216,16 +217,19 @@ def synthesize_node(state: AgentState) -> Dict[str, Any]:
         from backend.config import settings
         llm = ChatGoogleGenerativeAI(model=settings.GEMINI_MODEL, temperature=0.3)
         chain = prompt_template | llm
-        response = chain.invoke({
+        
+        response_content = ""
+        async for chunk in chain.astream({
             "context_docs": chunks_str or "No documents retrieved.",
             "web_docs": web_str or "No web results.",
             "graph_relationships": triples_str or "No relationships retrieved.",
             "history": history_context or "No history.",
             "query": state["query"]
-        })
-        
+        }):
+            response_content += chunk.content
+            
         return {
-            "raw_response": response.content,
+            "raw_response": response_content,
             "citations": citations
         }
     except Exception as e:
@@ -236,6 +240,7 @@ def synthesize_node(state: AgentState) -> Dict[str, Any]:
             "raw_response": f"Error during response synthesis: {e}",
             "citations": citations
         }
+
 
 # Conditional routing functions
 def route_router(state: AgentState) -> str:
@@ -304,3 +309,73 @@ def get_graph():
     
     _compiled_graph = workflow.compile()
     return _compiled_graph
+
+
+async def ainvoke_with_events(state: AgentState) -> AsyncGenerator[str, None]:
+    from backend.agents.telemetry import (
+        TelemetryEvent, TextChunkEvent, CitationEvent,
+        SessionEvent, DoneEvent, ErrorEvent
+    )
+    graph = get_graph()
+    streamed_any_tokens = False
+
+    try:
+        async for event in graph.astream_events(state, version="v2"):
+            kind = event.get("event")
+            name = event.get("name")
+            
+            if kind == "on_chain_start" and name == "LangGraph":
+                yield TelemetryEvent("input_guard", "checking query safety").to_sse()
+                
+            elif kind in ("on_chain_start", "on_node_start"):
+                if name == "rewrite":
+                    yield TelemetryEvent("rewriter", "generating query variants").to_sse()
+                elif name in ("vector_retrieve", "graph_retrieve", "hybrid_retrieve"):
+                    route_name = name.split("_")[0]
+                    yield TelemetryEvent("router", f"routed to {route_name}").to_sse()
+                elif name == "crag_check":
+                    yield TelemetryEvent("crag_eval", "evaluating relevance").to_sse()
+                elif name == "web_search":
+                    yield TelemetryEvent("crag_eval", "relevance below threshold - triggering web search").to_sse()
+                elif name == "synthesize":
+                    yield TelemetryEvent("synthesis", "generating response").to_sse()
+                    
+            elif kind == "on_chat_model_stream":
+                chunk = event["data"].get("chunk")
+                if chunk:
+                    content = getattr(chunk, "content", None) or (chunk.get("content") if isinstance(chunk, dict) else str(chunk))
+                    if content:
+                        streamed_any_tokens = True
+                        yield TextChunkEvent(content).to_sse()
+                        
+            elif kind == "on_chain_end" and (name == "LangGraph" or not event.get("parent_ids")):
+                final_state = event["data"].get("output")
+                if final_state:
+                    raw_response = final_state.get("raw_response", "")
+                    citations = final_state.get("citations", [])
+                    session_id = final_state.get("session_id", state.get("session_id", "default-session"))
+                    
+                    if not streamed_any_tokens:
+                        for chunk in _chunk_text(raw_response):
+                            yield TextChunkEvent(chunk).to_sse()
+                            await asyncio.sleep(0)
+                            
+                    for citation in citations:
+                        yield CitationEvent(
+                            source=citation.get("source", "vector"),
+                            doc_name=citation.get("doc_name", ""),
+                            page=citation.get("page_number", 0),
+                            url=citation.get("url", ""),
+                            triple=citation.get("triple", None)
+                        ).to_sse()
+                        
+                    yield SessionEvent(session_id).to_sse()
+                    yield DoneEvent().to_sse()
+    except Exception as e:
+        yield ErrorEvent(str(e)).to_sse()
+
+def _chunk_text(text: str, size: int = 5) -> List[str]:
+    words = text.split()
+    for i in range(0, len(words), size):
+        yield " ".join(words[i:i+size]) + " "
+

@@ -1,7 +1,7 @@
 import { createRoute } from '@tanstack/react-router';
 import { Route as dashboardRoute } from './_dashboard';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { apiFetch, API_BASE } from '../lib/api';
+import { apiFetch, API_BASE, authHeaders } from '../lib/api';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { clientSideInputCheck } from '../utils/safety';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -296,33 +296,28 @@ function ChatInterfaceConsole() {
     setSendingQuery(true);
     setQueryInput('');
 
-    const queryParams = new URLSearchParams({
-      q: currentQuery,
-      session_id: activeSessionId
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+    };
+    const body = JSON.stringify({
+      query: currentQuery,
+      session_id: activeSessionId,
+      ...(currentParentId ? { parent_msg_id: currentParentId } : {}),
     });
-    if (activeTeamId) {
-      queryParams.append('team_id', activeTeamId);
-    }
-    if (currentParentId) {
-      queryParams.append('parent_msg_id', currentParentId);
-    }
-
-    const token = localStorage.getItem('token');
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
 
     const abortController = new AbortController();
 
     let assistantId = '';
     let userId = '';
     let currentResponseText = '';
+    let currentCitations: any[] = [];
 
     try {
-      await fetchEventSource(`${API_BASE}/api/query/stream?${queryParams.toString()}`, {
-        method: 'GET',
+      await fetchEventSource(`${API_BASE}/api/query/stream`, {
+        method: 'POST',
         headers,
+        body,
         signal: abortController.signal,
         async onopen(response) {
           if (response.ok) {
@@ -336,62 +331,96 @@ function ChatInterfaceConsole() {
           throw new Error(errMsg);
         },
         onmessage(ev) {
-          if (ev.data === '[DONE]') {
-            setSendingQuery(false);
-            fetchMessages(activeSessionId);
-            fetchSessions();
-            setParentMsgId(null);
-            abortController.abort(); // clean up the stream connection
-            return;
-          }
-
           try {
             const data = JSON.parse(ev.data);
-            if (data.message_id && data.user_message_id) {
-              assistantId = data.message_id;
-              userId = data.user_message_id;
-
-              const newUserMsg: Message = {
-                message_id: userId,
-                session_id: activeSessionId,
-                parent_message_id: currentParentId,
-                role: 'user',
-                content: currentQuery,
-                created_at: new Date().toISOString()
-              };
-
-              const newAssistantMsg: Message = {
-                message_id: assistantId,
-                session_id: activeSessionId,
-                parent_message_id: userId,
-                role: 'assistant',
-                content: '',
-                created_at: new Date().toISOString(),
-                citations: data.citations || []
-              };
-
-              setMessages((prev) => [...prev, newUserMsg, newAssistantMsg]);
-              setActiveMessageId(assistantId);
-            } else if (data.token) {
-              currentResponseText += data.token;
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.message_id === assistantId
-                    ? { ...msg, content: currentResponseText }
-                    : msg
-                )
-              );
+            switch (data.type) {
+              case 'text_chunk':
+                if (!assistantId) {
+                  assistantId = 'pending-' + Date.now();
+                  userId = 'pending-user-' + Date.now();
+                  const pendingUserMsg: Message = {
+                    message_id: userId,
+                    session_id: activeSessionId,
+                    parent_message_id: currentParentId,
+                    role: 'user',
+                    content: currentQuery,
+                    created_at: new Date().toISOString()
+                  };
+                  const pendingAssistantMsg: Message = {
+                    message_id: assistantId,
+                    session_id: activeSessionId,
+                    parent_message_id: userId,
+                    role: 'assistant',
+                    content: '',
+                    created_at: new Date().toISOString()
+                  };
+                  setMessages((prev) => [...prev, pendingUserMsg, pendingAssistantMsg]);
+                  setActiveMessageId(assistantId);
+                }
+                currentResponseText += data.content;
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.message_id === assistantId
+                      ? { ...msg, content: currentResponseText }
+                      : msg
+                  )
+                );
+                break;
+              case 'citation':
+                currentCitations.push(data);
+                break;
+              case 'session':
+                if (data.user_message_id && data.message_id) {
+                  userId = data.user_message_id;
+                  assistantId = data.message_id;
+                  setMessages((prev) =>
+                    prev.map((msg) => {
+                      if (msg.message_id === userId) return { ...msg, message_id: userId };
+                      if (msg.message_id.startsWith('pending-')) return { ...msg, message_id: assistantId };
+                      return msg;
+                    })
+                  );
+                  setActiveMessageId(assistantId);
+                }
+                break;
+              case 'done':
+                if (assistantId && currentCitations.length > 0) {
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.message_id === assistantId
+                        ? { ...msg, citations: currentCitations }
+                        : msg
+                    )
+                  );
+                }
+                setSendingQuery(false);
+                fetchMessages(activeSessionId);
+                fetchSessions();
+                setParentMsgId(null);
+                abortController.abort();
+                break;
+              case 'error':
+                setError(data.detail);
+                setSendingQuery(false);
+                break;
+              default:
+                break;
             }
           } catch (err) {
             console.error('Error parsing SSE event:', err);
           }
         },
         onerror(err) {
+          if (err.message && /^Server returned status 4/.test(err.message)) {
+            setError(err.message);
+            setSendingQuery(false);
+            abortController.abort();
+            return;
+          }
           setError(err.message || 'Stream connection error');
           setSendingQuery(false);
-          setQueryInput(currentQuery); // restore input
           abortController.abort();
-          throw err; // prevent automatic retry by fetchEventSource
+          throw err;
         }
       });
     } catch (err: any) {

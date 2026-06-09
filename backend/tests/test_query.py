@@ -41,18 +41,18 @@ def get_auth_headers(user_id="test-user", role="user"):
     return {"Authorization": f"Bearer {token}"}
 
 def test_query_auth_required():
-    res = client.get("/api/query?q=hello")
+    res = client.post("/api/query", json={"query": "hello"})
     assert res.status_code == 401
 
 def test_query_input_validation():
     headers = get_auth_headers()
     # Query too short (less than 3 chars)
-    res = client.get("/api/query?q=hi", headers=headers)
+    res = client.post("/api/query", json={"query": "hi"}, headers=headers)
     assert res.status_code == 422
     
     # Query too long (greater than 2000 chars)
     long_q = "a" * 2001
-    res = client.get(f"/api/query?q={long_q}", headers=headers)
+    res = client.post("/api/query", json={"query": long_q}, headers=headers)
     assert res.status_code == 422
 
 @patch("backend.api.routes.query.RedisMemory")
@@ -69,7 +69,7 @@ def test_linear_query_flow(mock_get_graph, mock_redis_memory_cls):
     mock_redis.get_history.return_value = [{"role": "user", "content": "hi"}]
 
     headers = get_auth_headers()
-    res = client.get("/api/query?q=what is this&session_id=session-123", headers=headers)
+    res = client.post("/api/query", json={"query": "what is this", "session_id": "session-123"}, headers=headers)
     assert res.status_code == 200
     
     data = res.json()
@@ -107,8 +107,9 @@ def test_branching_query_flow(mock_get_graph, mock_redis_memory_cls):
     mock_redis_memory_cls.return_value = mock_redis
 
     headers = get_auth_headers()
-    res = client.get(
-        "/api/query?q=branched question&session_id=session-123&parent_msg_id=parent-msg-123",
+    res = client.post(
+        "/api/query",
+        json={"query": "branched question", "session_id": "session-123", "parent_msg_id": "parent-msg-123"},
         headers=headers
     )
     assert res.status_code == 200
@@ -173,7 +174,7 @@ def test_query_includes_citations(mock_get_graph, mock_redis_memory_cls):
     mock_redis_memory_cls.return_value = mock_redis
 
     headers = get_auth_headers()
-    res = client.get("/api/query?q=query with citations&session_id=session-cit", headers=headers)
+    res = client.post("/api/query", json={"query": "query with citations", "session_id": "session-cit"}, headers=headers)
     assert res.status_code == 200
     data = res.json()
     assert data["citations"] == expected_citations
@@ -206,4 +207,48 @@ def test_get_chat_messages_includes_citations():
     data = res.json()
     assert len(data["messages"]) == 1
     assert data["messages"][0]["citations"] == expected_citations
+
+
+@pytest.mark.asyncio
+@patch("backend.api.routes.query.RedisMemory")
+@patch("backend.api.routes.query.ainvoke_with_events")
+async def test_streaming_endpoint(mock_ainvoke, mock_redis_cls):
+    from backend.agents.telemetry import TelemetryEvent, TextChunkEvent, DoneEvent
+
+    async def mock_events(state):
+        yield TelemetryEvent("router", "routing to hybrid").to_sse()
+        yield TextChunkEvent("Hello").to_sse()
+        yield DoneEvent().to_sse()
+
+    mock_ainvoke.side_effect = mock_events
+
+    mock_redis = MagicMock()
+    mock_redis_cls.return_value = mock_redis
+    mock_redis.get_history.return_value = []
+
+    headers = get_auth_headers()
+    res = client.post(
+        "/api/query/stream",
+        json={"query": "hello", "session_id": "test-session"},
+        headers=headers
+    )
+    assert res.status_code == 200
+    body = res.text
+    assert "telemetry" in body
+    assert "text_chunk" in body
+    assert "done" in body
+
+    # Verify messages were persisted to database
+    db = TestingSessionLocal()
+    msgs = db.query(Message).filter(Message.session_id == "test-session").order_by(Message.created_at.asc()).all()
+    assert len(msgs) == 2
+    assert msgs[0].role == "user"
+    assert msgs[0].content == "hello"
+    assert msgs[1].role == "assistant"
+    assert msgs[1].content == "Hello"
+
+    # Verify Redis save was called since parent_msg_id is None
+    mock_redis.save_message.assert_any_call("test-session", "user", "hello")
+    mock_redis.save_message.assert_any_call("test-session", "assistant", "Hello")
+
 

@@ -61,7 +61,8 @@ def test_rewriter_exception_fallback():
         assert len(res) == 1
         assert res[0] == "How is Alice connected to Bob?"
 
-def test_graph_execution_hybrid_route():
+@pytest.mark.asyncio
+async def test_graph_execution_hybrid_route():
     import os
     with patch.dict(os.environ, {"MOCK_LLM": "true"}):
         with patch("backend.agents.rewriter.rewrite_query") as mock_rewrite, \
@@ -90,7 +91,7 @@ def test_graph_execution_hybrid_route():
                 "relevance_pass": True
             }
             
-            result = graph.invoke(initial_state)
+            result = await graph.ainvoke(initial_state)
             
             assert result["route"] == "hybrid"
             assert len(result["rewritten_queries"]) == 1

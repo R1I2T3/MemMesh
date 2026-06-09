@@ -1,44 +1,28 @@
 import pytest
 from backend.agents.safety import validate_query, validate_output, SafetyValidationError
 
-def test_validate_query_toxic_blocked():
-    with pytest.raises(SafetyValidationError, match="toxic language"):
-        validate_query("This is a toxic and offensive query.")
-        
-    with pytest.raises(SafetyValidationError, match="toxic language"):
-        validate_query("I hate you and want to say hate speech.")
+def test_pii_scrubbing_email():
+    result = validate_query("Contact me at test@example.com")
+    assert "[EMAIL]" in result
+    assert "test@example.com" not in result
 
-def test_validate_query_pii_email_scrubbed():
-    # Test email scrubbing
-    query = "My email is test.user@example.com, please contact me."
-    scrubbed = validate_query(query)
-    assert "test.user@example.com" not in scrubbed
-    assert "[EMAIL]" in scrubbed
+def test_pii_scrubbing_phone():
+    result = validate_query("Call 555-123-4567")
+    assert "[PHONE]" in result
 
-def test_validate_query_pii_phone_scrubbed():
-    # Test phone number scrubbing
-    query = "Reach me at 123-456-7890 tomorrow."
-    scrubbed = validate_query(query)
-    assert "123-456-7890" not in scrubbed
-    assert "[PHONE]" in scrubbed
+def test_toxic_query_blocked():
+    with pytest.raises(SafetyValidationError):
+        validate_query("I will kill you")
 
-def test_validate_query_clean_passes():
-    query = "Who is the lead engineer of Project Titan?"
-    result = validate_query(query)
-    assert result == query
+def test_safe_query_passes():
+    result = validate_query("What is the capital of France?")
+    assert result == "What is the capital of France?"
 
-# Output Safety Tests
-def test_validate_output_toxic_blocked():
-    with pytest.raises(SafetyValidationError, match="toxic language"):
-        validate_output("This response contains toxic and offensive language.")
+def test_output_pii_scrubbing():
+    result = validate_output("My email is user@example.com and phone is 555-987-6543")
+    assert "[EMAIL]" in result
+    assert "[PHONE]" in result
 
-def test_validate_output_pii_email_scrubbed():
-    response = "Contact the admin at superadmin@memmesh.com for details."
-    scrubbed = validate_output(response)
-    assert "superadmin@memmesh.com" not in scrubbed
-    assert "[EMAIL]" in scrubbed
-
-def test_validate_output_clean_passes():
-    response = "The team lead of Project Titan is Alice."
-    result = validate_output(response)
-    assert result == response
+def test_output_toxic_blocked():
+    with pytest.raises(SafetyValidationError):
+        validate_output("You are an idiot")

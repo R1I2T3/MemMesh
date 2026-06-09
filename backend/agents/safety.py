@@ -1,99 +1,67 @@
-import os
 import re
+import logging
+from functools import cache
+
+logger = logging.getLogger(__name__)
 
 class SafetyValidationError(ValueError):
-    """Exception raised when input fails safety validation check."""
     pass
 
-def validate_query(query: str) -> str:
-    """
-    Validates the user's query for safety (toxicity and PII).
-    Uses Guardrails AI (PiiFilter and ToxicLanguage) with a regex fallback 
-    to support offline/mock executions without external Hub model downloads.
-    """
-    query_lower = query.lower()
-    # Toxic language check
-    if "toxic" in query_lower or "hate" in query_lower or "offensive" in query_lower:
-        raise SafetyValidationError("Query contains toxic language and is blocked.")
+@cache
+def _get_analyzer_engine():
+    from presidio_analyzer import AnalyzerEngine
+    return AnalyzerEngine()
 
-    # In mock mode, use regex to scrub PII and return output
-    if os.environ.get("MOCK_LLM") == "true":
-        scrubbed = query
-        # Email regex
-        scrubbed = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL]", scrubbed)
-        # Phone regex
-        scrubbed = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", scrubbed)
-        return scrubbed
+@cache
+def _get_anonymizer_engine():
+    from presidio_anonymizer import AnonymizerEngine
+    return AnonymizerEngine()
 
-    try:
-        import guardrails as gd
+_presidio_available = False
+try:
+    _get_analyzer_engine()
+    _get_anonymizer_engine()
+    _presidio_available = True
+except Exception:
+    logger.warning("Presidio not available. PII detection will use regex fallback.")
+
+TOXIC_PATTERNS = [
+    r"\b(kill|die|murder|attack|bomb|terrorist)\b",
+    r"\b(hate|stupid|idiot|worthless)\b",
+]
+
+PHONE_REGEX = re.compile(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b")
+EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+SSN_REGEX = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
+
+def _has_toxic_content(text: str) -> bool:
+    lower = text.lower()
+    for pattern in TOXIC_PATTERNS:
+        if re.search(pattern, lower):
+            return True
+    return False
+
+def _scrub_pii(text: str) -> str:
+    if _presidio_available:
         try:
-            from guardrails.hub import ToxicLanguage, PiiFilter
-            
-            # Initialize Guard with PII filter and Toxic language checks
-            input_guard = gd.Guard().use_many(
-                PiiFilter(on_fail="fix"),
-                ToxicLanguage(threshold=0.8, on_fail="exception")
-            )
-            
-            result = input_guard.validate(query)
-            if not result.validation_passed:
-                # If toxic language or other violation threw a validation exception
-                raise SafetyValidationError("Guardrails safety validation failed.")
-            return result.validated_output
-        except (ImportError, Exception) as inner_err:
-            # Fallback if Guardrails hub or validators fail to download models offline
-            scrubbed = query
-            scrubbed = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL]", scrubbed)
-            scrubbed = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", scrubbed)
-            return scrubbed
-    except SafetyValidationError:
-        raise
-    except Exception as e:
-        raise SafetyValidationError(f"Safety validation error: {e}")
+            analyzer = _get_analyzer_engine()
+            anonymizer = _get_anonymizer_engine()
+            results = analyzer.analyze(text=text, language="en")
+            if results:
+                return anonymizer.anonymize(text=text, analyzer_results=results).text
+        except Exception:
+            logger.exception("Presidio failed, falling back to regex")
+    text = EMAIL_REGEX.sub("[EMAIL]", text)
+    text = PHONE_REGEX.sub("[PHONE]", text)
+    text = SSN_REGEX.sub("[SSN]", text)
+    return text
+
+def validate_query(query: str) -> str:
+    if _has_toxic_content(query):
+        raise SafetyValidationError("Query contains potentially harmful content")
+    return _scrub_pii(query)
 
 def validate_output(output: str) -> str:
-    """
-    Validates the LLM-generated output for safety (toxicity and PII).
-    Uses Guardrails AI (PiiFilter and ToxicLanguage) with a regex fallback 
-    to support offline/mock executions without external Hub model downloads.
-    """
-    output_lower = output.lower()
-    # Toxic language check
-    if "toxic" in output_lower or "hate" in output_lower or "offensive" in output_lower:
-        raise SafetyValidationError("Output contains toxic language and is blocked.")
-
-    # In mock mode, use regex to scrub PII and return output
-    if os.environ.get("MOCK_LLM") == "true":
-        scrubbed = output
-        # Email regex
-        scrubbed = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL]", scrubbed)
-        # Phone regex
-        scrubbed = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", scrubbed)
-        return scrubbed
-
-    try:
-        import guardrails as gd
-        try:
-            from guardrails.hub import ToxicLanguage, PiiFilter
-            
-            output_guard = gd.Guard().use_many(
-                PiiFilter(on_fail="fix"),
-                ToxicLanguage(threshold=0.8, on_fail="exception")
-            )
-            
-            result = output_guard.validate(output)
-            if not result.validation_passed:
-                raise SafetyValidationError("Guardrails output safety validation failed.")
-            return result.validated_output
-        except (ImportError, Exception):
-            # Fallback if Guardrails hub or validators fail to download models offline
-            scrubbed = output
-            scrubbed = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL]", scrubbed)
-            scrubbed = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", scrubbed)
-            return scrubbed
-    except SafetyValidationError:
-        raise
-    except Exception as e:
-        raise SafetyValidationError(f"Safety output validation error: {e}")
-
+    if _has_toxic_content(output):
+        raise SafetyValidationError("Output contains potentially harmful content")
+    return _scrub_pii(output)

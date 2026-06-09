@@ -2,7 +2,9 @@ import uuid
 import json
 import logging
 from typing import List, Dict, Any
-from fastapi import APIRouter, Depends, Query, HTTPException, Header
+from fastapi import APIRouter, Depends, Query, HTTPException, Header, Request
+from backend.config import settings
+from backend.rate_limiter import limiter
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
@@ -23,7 +25,9 @@ class QueryRequest(BaseModel):
 router = APIRouter(prefix="/api", tags=["query"])
 
 @router.post("/query", status_code=200)
+@limiter.limit(settings.RATE_LIMIT_QUERY)
 def run_query(
+    request: Request,
     payload: QueryRequest,
     x_active_team_id: str | None = Header(default=None, alias="X-Active-Team-ID"),
     current_user: dict = Depends(get_current_user),
@@ -148,7 +152,9 @@ def _load_history(db: Session, session_id: str, parent_msg_id: str | None, user_
     return history
 
 @router.post("/query/stream")
+@limiter.limit(settings.RATE_LIMIT_QUERY)
 async def run_query_stream(
+    request: Request,
     payload: QueryRequest,
     x_active_team_id: str | None = Header(default=None, alias="X-Active-Team-ID"),
     current_user: dict = Depends(get_current_user),

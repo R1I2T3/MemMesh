@@ -18,6 +18,7 @@ dependencies = [
     "alembic",
     "celery",
     "redis",
+    "slowapi>=0.1.9",
     "weaviate-client",
     "neo4j",
     "langgraph",

@@ -1,6 +1,8 @@
 import uuid
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from backend.config import settings
+from backend.rate_limiter import limiter
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from backend.db.mysql import get_db
@@ -24,7 +26,8 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 @router.post("/login")
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit(settings.RATE_LIMIT_LOGIN)
+def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter_by(email=payload.email).first()
     password_hash = user.password_hash if user else DUMMY_PASSWORD_HASH
     password_correct = verify_password(payload.password, password_hash)
@@ -35,7 +38,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     return {"token": token, "role": user.global_role}
 
 @router.post("/register", status_code=201)
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+@limiter.limit(settings.RATE_LIMIT_REGISTER)
+def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)):
     existing = db.query(User).filter_by(email=payload.email).first()
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")

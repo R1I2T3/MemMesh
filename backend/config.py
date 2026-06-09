@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     MAX_UPLOAD_SIZE_MB: int = 50
 
+    RATE_LIMIT_LOGIN: str = "5/minute"
+    RATE_LIMIT_REGISTER: str = "3/minute"
+    RATE_LIMIT_QUERY: str = "30/minute"
+    RATE_LIMIT_GLOBAL: str = "100/minute"
+
     model_config = SettingsConfigDict(env_file=[".env", "../.env"], env_file_encoding="utf-8", extra="ignore")
 
     @property

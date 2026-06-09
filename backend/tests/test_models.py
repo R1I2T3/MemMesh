@@ -3,7 +3,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from backend.db.mysql import Base
-from backend.models import User, Team, TeamMember, ParentDocument, Message, UserFeedback
+from backend.models import User, Team, TeamMember, ParentDocument, Message, UserFeedback, Session, Turn, SourceDoc, VectorChunk, RouterLog, EntityResolutionLog, CrawlJob
 
 def test_models_create_all_tables():
     """Verify all models produce DDL and tables can be written to."""
@@ -111,3 +111,139 @@ def test_cascade_delete_team():
         assert session.query(ParentDocument).filter_by(parent_id=doc_id).first() is None
         # User should still exist
         assert session.query(User).filter_by(user_id=u_id).first() is not None
+
+def test_session_model_creation():
+    session = Session(
+        session_id="test-session-id",
+        user_id="test-user",
+        team_id="test-team",
+        title="Test Session"
+    )
+    assert session.session_id == "test-session-id"
+    assert session.title == "Test Session"
+
+def test_source_doc_model_with_hash():
+    """SourceDoc default status should be 'pending' when flushed to DB."""
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    SessionFactory = sessionmaker(bind=engine)
+    with SessionFactory() as session:
+        user_id = str(uuid.uuid4())
+        team_id = str(uuid.uuid4())
+        session.add(User(user_id=user_id, email="test@test.com", password_hash="hash"))
+        session.add(Team(team_id=team_id, name="Test Team"))
+        session.flush()
+
+        doc = SourceDoc(
+            doc_id="doc-1",
+            team_id=team_id,
+            source_type="upload",
+            source_ref="/tmp/test.pdf",
+            file_name="test.pdf",
+            file_format="pdf",
+            content_hash="abc123",
+            uploaded_by=user_id
+        )
+        session.add(doc)
+        session.flush()
+        assert doc.content_hash == "abc123"
+        assert doc.status == "pending"
+
+def test_new_models_create_all_tables():
+    """Verify all new models produce DDL and tables can be written to."""
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    SessionFactory = sessionmaker(bind=engine)
+    with SessionFactory() as session:
+        user_id = str(uuid.uuid4())
+        team_id = str(uuid.uuid4())
+        session.add(User(user_id=user_id, email="test@test.com", password_hash="hash"))
+        session.add(Team(team_id=team_id, name="Test Team"))
+        session.flush()
+
+        # Session
+        sess = Session(
+            session_id=str(uuid.uuid4()),
+            user_id=user_id,
+            team_id=team_id,
+            title="Test Session"
+        )
+        session.add(sess)
+        session.flush()
+
+        # Turn
+        turn = Turn(
+            turn_id=str(uuid.uuid4()),
+            session_id=sess.session_id,
+            team_id=team_id,
+            role="user",
+            content="Hello"
+        )
+        session.add(turn)
+        session.flush()
+
+        # SourceDoc
+        doc = SourceDoc(
+            doc_id=str(uuid.uuid4()),
+            team_id=team_id,
+            source_type="upload",
+            source_ref="/tmp/test.pdf",
+            file_name="test.pdf",
+            file_format="pdf",
+            content_hash="abc123",
+            uploaded_by=user_id
+        )
+        session.add(doc)
+        session.flush()
+
+        # VectorChunk
+        chunk = VectorChunk(
+            chunk_id=str(uuid.uuid4()),
+            team_id=team_id,
+            doc_id=doc.doc_id
+        )
+        session.add(chunk)
+        session.flush()
+
+        # RouterLog
+        rlog = RouterLog(
+            id=1,
+            team_id=team_id,
+            user_id=user_id,
+            query_hash="abc",
+            route="hybrid",
+            latency_ms=100
+        )
+        session.add(rlog)
+        session.flush()
+
+        # EntityResolutionLog
+        erlog = EntityResolutionLog(
+            id=1,
+            team_id=team_id,
+            source_node_id="node-1",
+            target_node_id="node-2",
+            merge_reason="Duplicate"
+        )
+        session.add(erlog)
+        session.flush()
+
+        # CrawlJob
+        cj = CrawlJob(
+            job_id=str(uuid.uuid4()),
+            team_id=team_id,
+            triggered_by=user_id,
+            source_url="https://example.com",
+            status="pending"
+        )
+        session.add(cj)
+        session.commit()
+
+        # Verify all inserted
+        assert session.query(Session).count() == 1
+        assert session.query(Turn).count() == 1
+        assert session.query(SourceDoc).count() == 1
+        assert session.query(VectorChunk).count() == 1
+        assert session.query(RouterLog).count() == 1
+        assert session.query(EntityResolutionLog).count() == 1
+        assert session.query(CrawlJob).count() == 1

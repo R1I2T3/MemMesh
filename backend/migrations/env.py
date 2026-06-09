@@ -22,7 +22,7 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from backend.db.mysql import Base
-from backend.models import User, Team, TeamMember, ParentDocument, Message, UserFeedback
+from backend.models import User, Team, TeamMember, ParentDocument, Message, UserFeedback, Session, Turn, SourceDoc, VectorChunk, RouterLog, EntityResolutionLog, CrawlJob
 target_metadata = Base.metadata
 
 # Set connection string dynamically from Settings:

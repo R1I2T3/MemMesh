@@ -9,6 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import {
   MessageSquareIcon,
   GitBranchIcon,
@@ -80,64 +83,48 @@ function ChatInterfaceConsole() {
   };
 
   const renderMessageContent = (msg: Message) => {
-    if (msg.role !== 'assistant' || !msg.citations || msg.citations.length === 0) {
-      return <div className="whitespace-pre-wrap">{msg.content}</div>;
-    }
+    const hasCitations = msg.role === 'assistant' && msg.citations && msg.citations.length > 0;
 
-    // Match citations like [1] or [Web 1]
-    const regex = /(\[(?:Web\s+\d+|\d+)\])/gi;
-    const parts = msg.content.split(regex);
-    if (parts.length === 1) {
-      return <div className="whitespace-pre-wrap">{msg.content}</div>;
-    }
+    const processed = hasCitations
+      ? msg.content.replace(
+          /\[(?:Web\s+)?(\d+)\]/g,
+          (match, num) => `<span data-idx="${parseInt(num) - 1}">${match}</span>`
+        )
+      : msg.content;
 
-    const renderedParts: React.ReactNode[] = [];
-    for (let i = 0; i < parts.length; i++) {
-      if (i % 2 === 0) {
-        // Normal text
-        renderedParts.push(parts[i]);
-      } else {
-        // Citation tag (e.g., "[1]" or "[Web 1]")
-        const tag = parts[i];
-        const ref = tag.substring(1, tag.length - 1);
-        let targetCitation: Citation | null = null;
-
-        if (/^\d+$/.test(ref)) {
-          // Numeric citation index (1-based)
-          const idx = parseInt(ref, 10) - 1;
-          if (msg.citations && idx >= 0 && idx < msg.citations.length) {
-            targetCitation = msg.citations[idx];
-          }
-        } else {
-          // Web citation index (e.g. "Web 1" or "Web 2")
-          const match = ref.match(/Web\s+(\d+)/i);
-          if (match) {
-            const webIdx = parseInt(match[1], 10) - 1;
-            const webCitations = msg.citations.filter((c: any) => c.type === 'web' || !!c.url);
-            if (webIdx >= 0 && webIdx < webCitations.length) {
-              targetCitation = webCitations[webIdx];
-            }
-          }
-        }
-
-        if (targetCitation) {
-          renderedParts.push(
-            <button
-              key={i}
-              onClick={() => handleCitationClick(targetCitation!)}
-              className="inline-flex items-center justify-center px-1.5 py-0.5 mx-0.5 text-xs font-semibold rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-900/60 dark:hover:bg-indigo-900/50 transition-colors shadow-sm cursor-pointer align-baseline font-mono"
-              title={`View source: ${targetCitation.source || targetCitation.url || 'Document'}`}
-            >
-              {tag}
-            </button>
-          );
-        } else {
-          renderedParts.push(tag);
-        }
-      }
-    }
-
-    return <div className="whitespace-pre-wrap">{renderedParts}</div>;
+    return (
+      <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeRaw]}
+          components={{
+            span: ({ children, ...props }) => {
+              const dataIdx = (props as any)['data-idx'];
+              if (dataIdx !== undefined) {
+                const idx = parseInt(dataIdx, 10);
+                const citations = msg.citations as any[] | undefined;
+                const citation = citations?.[idx];
+                if (citation) {
+                  return (
+                    <button
+                      onClick={() => handleCitationClick(citation)}
+                      className="inline-flex items-center justify-center px-1.5 py-0.5 mx-0.5 text-xs font-semibold rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-900/60 dark:hover:bg-indigo-900/50 transition-colors shadow-sm cursor-pointer align-baseline font-mono not-prose"
+                      title={`View source: ${citation.source || citation.url || 'Document'}`}
+                    >
+                      {children}
+                    </button>
+                  );
+                }
+                return <span className="font-mono text-xs">{children}</span>;
+              }
+              return <span>{children}</span>;
+            },
+          }}
+        >
+          {processed}
+        </ReactMarkdown>
+      </div>
+    );
   };
 
   // Ratings State for Feedback

@@ -192,6 +192,7 @@ async def run_query_stream(
     async def event_stream():
         full_response = ""
         citations_list = []
+        persisted = False
 
         yield f"data: {json.dumps({'type': 'session', 'session_id': payload.session_id, 'user_message_id': user_msg_id, 'message_id': assistant_msg_id})}\n\n"
 
@@ -200,10 +201,26 @@ async def run_query_stream(
                 if event.startswith("data: "):
                     try:
                         parsed = json.loads(event[6:].strip())
-                        if parsed.get("type") == "text_chunk":
+                        t = parsed.get("type")
+                        if t == "text_chunk":
                             full_response += parsed.get("content", "")
-                        elif parsed.get("type") == "citation":
+                        elif t == "citation":
                             citations_list.append(parsed)
+                        elif t == "done" and not persisted:
+                            if full_response:
+                                try:
+                                    validated_response = validate_output(full_response)
+                                except SafetyValidationError:
+                                    validated_response = full_response
+                            else:
+                                validated_response = full_response
+                            await run_in_threadpool(
+                                _persist_stream_messages,
+                                db, validated_q, validated_response, citations_list,
+                                user_msg_id, assistant_msg_id, payload.session_id,
+                                payload.parent_msg_id, user_id
+                            )
+                            persisted = True
                     except json.JSONDecodeError:
                         pass
                 yield event
@@ -211,20 +228,21 @@ async def run_query_stream(
             logger.exception("Stream error")
             yield ErrorEvent("Internal error during response generation").to_sse()
         finally:
-            if full_response:
-                try:
-                    validated_response = validate_output(full_response)
-                except SafetyValidationError:
+            if not persisted:
+                if full_response:
+                    try:
+                        validated_response = validate_output(full_response)
+                    except SafetyValidationError:
+                        validated_response = full_response
+                else:
                     validated_response = full_response
-            else:
-                validated_response = full_response
 
-            await run_in_threadpool(
-                _persist_stream_messages,
-                db, validated_q, validated_response, citations_list,
-                user_msg_id, assistant_msg_id, payload.session_id,
-                payload.parent_msg_id, user_id
-            )
+                await run_in_threadpool(
+                    _persist_stream_messages,
+                    db, validated_q, validated_response, citations_list,
+                    user_msg_id, assistant_msg_id, payload.session_id,
+                    payload.parent_msg_id, user_id
+                )
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

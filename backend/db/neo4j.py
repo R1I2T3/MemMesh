@@ -18,6 +18,13 @@ class Neo4jManager:
         global _neo4j_mgr
         _neo4j_mgr = self
 
+    @classmethod
+    def get_instance(cls) -> "Neo4jManager":
+        global _neo4j_mgr
+        if _neo4j_mgr is None:
+            _neo4j_mgr = cls()
+        return _neo4j_mgr
+
     def close(self):
         self.driver.close()
 
@@ -96,6 +103,39 @@ class Neo4jManager:
                 target_id=target_id,
                 team_id=team_id,
                 type=rel_type
+            )
+
+    def write_entities_batch(self, team_id: str, entities: list[dict], source_doc_id: str):
+        query = (
+            "UNWIND $entities AS e "
+            "MERGE (n:Entity {id: e.id, team_id: $team_id}) "
+            "ON CREATE SET n.name = e.name, n.type = e.type, "
+            "n.importance_score = 1.0, n.source_doc_id = $doc_id, "
+            "n.created_at = datetime()"
+        )
+        with self._get_session(team_id) as session:
+            session.run(
+                query,
+                entities=[{"id": e["id"], "name": e["name"], "type": e.get("type", "Concept")}
+                          for e in entities if isinstance(e, dict) and e.get("id") and e.get("name")],
+                team_id=team_id,
+                doc_id=source_doc_id
+            )
+
+    def write_relationships_batch(self, team_id: str, relationships: list[dict]):
+        query = (
+            "UNWIND $relationships AS r "
+            "MATCH (a:Entity {id: r.source_id, team_id: $team_id}), "
+            "(b:Entity {id: r.target_id, team_id: $team_id}) "
+            "MERGE (a)-[rel:RELATES_TO {type: r.type, team_id: $team_id}]->(b) "
+            "ON CREATE SET rel.weight = 1.0, rel.created_at = datetime(), rel.source = 'ingestion'"
+        )
+        with self._get_session(team_id) as session:
+            session.run(
+                query,
+                relationships=[{"source_id": r["source_id"], "target_id": r["target_id"], "type": r.get("type", "RELATES_TO")}
+                              for r in relationships if isinstance(r, dict) and r.get("source_id") and r.get("target_id")],
+                team_id=team_id
             )
 
     def get_entities(self, team_id: str) -> list[dict]:

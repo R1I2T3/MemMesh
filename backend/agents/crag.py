@@ -28,7 +28,7 @@ def evaluate_retrieval(state: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         from backend.config import settings
-        llm = ChatGoogleGenerativeAI(model=settings.GEMINI_MODEL, temperature=0)
+        llm = ChatGoogleGenerativeAI(model=settings.GEMINI_MODEL, temperature=0, google_api_key=settings.GEMINI_API_KEY)
         structured_llm = llm.with_structured_output(RelevanceGrade)
         
         prompt = ChatPromptTemplate.from_template(
@@ -40,6 +40,14 @@ def evaluate_retrieval(state: Dict[str, Any]) -> Dict[str, Any]:
         )
         
         chunks = state.get("retrieved_chunks", [])
+        triples = state.get("retrieved_triples", [])
+
+        if triples and not chunks:
+            return {
+                "relevance_pass": True,
+                "telemetry_log": "CRAG score: 1.0. Reasoning: Knowledge graph triples available."
+            }
+
         context_str = "\n".join([c.get("text", c.get("content", "")) for c in chunks])
         if not context_str.strip():
             return {

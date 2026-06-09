@@ -55,31 +55,36 @@ class WeaviateManager:
             logger.info("Created Weaviate tenant '%s'", team_id)
 
     def insert_chunks(self, tenant_id: str, chunks: list[dict], allowed_users: list[str]):
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         self.ensure_tenant(tenant_id)
         collection = self.client.collections.get(COLLECTION_NAME).with_tenant(tenant_id)
-        with collection.batch.dynamic() as batch:
-            for chunk in chunks:
-                text = chunk["text"]
-                vector = self._get_embedding(text)
-                batch.add_object(
-                    vector=vector,
-                    properties={
-                        "text": text,
-                        "parent_id": chunk["parent_id"],
-                        "page_number": chunk["page_number"],
-                        "bbox": chunk.get("bbox", []),
-                        "dl_meta": chunk.get("dl_meta", ""),
-                        "allowed_user_ids": allowed_users,
-                        "importance_score": 1.0,
-                    },
-                )
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {pool.submit(self._get_embedding, c["text"]): c for c in chunks}
+            with collection.batch.dynamic() as batch:
+                for future in as_completed(futures):
+                    chunk = futures[future]
+                    vector = future.result()
+                    batch.add_object(
+                        vector=vector,
+                        properties={
+                            "text": chunk["text"],
+                            "parent_id": chunk["parent_id"],
+                            "page_number": chunk["page_number"],
+                            "bbox": chunk.get("bbox", []),
+                            "dl_meta": chunk.get("dl_meta", ""),
+                            "allowed_user_ids": allowed_users,
+                            "importance_score": 1.0,
+                        },
+                    )
 
     def hybrid_search(self, tenant_id: str, query: str, current_user_id: str, limit: int = 5) -> list[dict]:
         collection = self.client.collections.get(COLLECTION_NAME).with_tenant(tenant_id)
         query_vector = self._get_embedding(query)
         results = collection.query.hybrid(
             query=query,
-            query_vector=query_vector,
+            vector=query_vector,
             alpha=0.5,
             filters=Filter.by_property("allowed_user_ids").contains_any([current_user_id, "public"]),
             limit=limit,

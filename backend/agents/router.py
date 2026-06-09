@@ -21,7 +21,7 @@ def route_query(query: str, model_name: str | None = None) -> RouteDecision:
         return RouteDecision(route="hybrid", reasoning="Mock route decision for E2E testing")
     try:
         # We use temperature 0 for deterministic routing decisions
-        llm = ChatGoogleGenerativeAI(model=model_name, temperature=0)
+        llm = ChatGoogleGenerativeAI(model=model_name, temperature=0, google_api_key=settings.GEMINI_API_KEY)
         structured_llm = llm.with_structured_output(RouteDecision)
         
         prompt_tmpl = ChatPromptTemplate.from_messages([

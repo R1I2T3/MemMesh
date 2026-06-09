@@ -19,7 +19,7 @@ def rewrite_query(query: str, model_name: str | None = None) -> List[str]:
     if os.environ.get("MOCK_LLM") == "true":
         return [query]
     try:
-        llm = ChatGoogleGenerativeAI(model=model_name, temperature=0)
+        llm = ChatGoogleGenerativeAI(model=model_name, temperature=0, google_api_key=settings.GEMINI_API_KEY)
         structured_llm = llm.with_structured_output(QueryRewriterOutput)
         
         prompt_tmpl = ChatPromptTemplate.from_messages([

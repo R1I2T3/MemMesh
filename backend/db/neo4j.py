@@ -75,7 +75,7 @@ class Neo4jManager:
 
     def write_entity(self, team_id: str, entity_id: str, name: str, entity_type: str, source_doc_id: str):
         query = (
-            "MERGE (e:Entity {id: $id, team_id: $team_id}) "
+            "MERGE (e:Entity {id: $id}) "
             "ON CREATE SET e.name = $name, e.type = $type, e.importance_score = 1.0, "
             "e.source_doc_id = $doc_id, e.created_at = datetime()"
         )
@@ -83,7 +83,6 @@ class Neo4jManager:
             session.run(
                 query,
                 id=entity_id,
-                team_id=team_id,
                 name=name,
                 type=entity_type,
                 doc_id=source_doc_id
@@ -91,9 +90,9 @@ class Neo4jManager:
 
     def write_relationship(self, team_id: str, source_id: str, target_id: str, rel_type: str):
         query = (
-            "MATCH (a:Entity {id: $source_id, team_id: $team_id}), "
-            "(b:Entity {id: $target_id, team_id: $team_id}) "
-            "MERGE (a)-[r:RELATES_TO {type: $type, team_id: $team_id}]->(b) "
+            "MATCH (a:Entity {id: $source_id}), "
+            "(b:Entity {id: $target_id}) "
+            "MERGE (a)-[r:RELATES_TO {type: $type}]->(b) "
             "ON CREATE SET r.weight = 1.0, r.created_at = datetime(), r.source = 'ingestion'"
         )
         with self._get_session(team_id) as session:
@@ -101,14 +100,13 @@ class Neo4jManager:
                 query,
                 source_id=source_id,
                 target_id=target_id,
-                team_id=team_id,
                 type=rel_type
             )
 
     def write_entities_batch(self, team_id: str, entities: list[dict], source_doc_id: str):
         query = (
             "UNWIND $entities AS e "
-            "MERGE (n:Entity {id: e.id, team_id: $team_id}) "
+            "MERGE (n:Entity {id: e.id}) "
             "ON CREATE SET n.name = e.name, n.type = e.type, "
             "n.importance_score = 1.0, n.source_doc_id = $doc_id, "
             "n.created_at = datetime()"
@@ -118,51 +116,50 @@ class Neo4jManager:
                 query,
                 entities=[{"id": e["id"], "name": e["name"], "type": e.get("type", "Concept")}
                           for e in entities if isinstance(e, dict) and e.get("id") and e.get("name")],
-                team_id=team_id,
                 doc_id=source_doc_id
             )
 
     def write_relationships_batch(self, team_id: str, relationships: list[dict]):
         query = (
             "UNWIND $relationships AS r "
-            "MATCH (a:Entity {id: r.source_id, team_id: $team_id}), "
-            "(b:Entity {id: r.target_id, team_id: $team_id}) "
-            "MERGE (a)-[rel:RELATES_TO {type: r.type, team_id: $team_id}]->(b) "
+            "MATCH (a:Entity {id: r.source_id}), "
+            "(b:Entity {id: r.target_id}) "
+            "MERGE (a)-[rel:RELATES_TO {type: r.type}]->(b) "
             "ON CREATE SET rel.weight = 1.0, rel.created_at = datetime(), rel.source = 'ingestion'"
         )
         with self._get_session(team_id) as session:
             session.run(
                 query,
                 relationships=[{"source_id": r["source_id"], "target_id": r["target_id"], "type": r.get("type", "RELATES_TO")}
-                              for r in relationships if isinstance(r, dict) and r.get("source_id") and r.get("target_id")],
-                team_id=team_id
+                              for r in relationships if isinstance(r, dict) and r.get("source_id") and r.get("target_id")]
             )
 
     def get_entities(self, team_id: str) -> list[dict]:
         query = (
-            "MATCH (e:Entity {team_id: $team_id}) "
+            "MATCH (e:Entity) "
             "RETURN e.id AS id, e.name AS name, e.type AS type, "
             "e.importance_score AS importance_score, e.source_doc_id AS source_doc_id"
         )
         with self._get_session(team_id) as session:
-            result = session.run(query, team_id=team_id)
+            result = session.run(query)
             return [dict(record) for record in result]
 
     def query_relationships(self, team_id: str, keywords: list[str]) -> list[list[str]]:
         if not keywords:
             return []
         cypher_query = (
-            "MATCH (a:Entity {team_id: $team_id})-[r:RELATES_TO]->(b:Entity {team_id: $team_id}) "
-            "WHERE any(k in $keywords WHERE toLower(coalesce(a.name, '')) CONTAINS k OR toLower(coalesce(b.name, '')) CONTAINS k "
-            "OR toLower(coalesce(a.id, '')) CONTAINS k OR toLower(coalesce(b.id, '')) CONTAINS k) "
+            "MATCH (a:Entity)-[r:RELATES_TO]->(b:Entity) "
+            "WHERE any(k in $keywords WHERE toLower(coalesce(a.name, '')) CONTAINS k OR "
+            "toLower(coalesce(b.name, '')) CONTAINS k OR "
+            "toLower(coalesce(a.id, '')) CONTAINS k OR toLower(coalesce(b.id, '')) CONTAINS k) "
             "RETURN a.name AS source, r.type AS type, b.name AS target "
             "LIMIT 20"
         )
         with self._get_session(team_id) as session:
-            result = session.run(cypher_query, team_id=team_id, keywords=[k.lower() for k in keywords])
+            result = session.run(cypher_query, keywords=[k.lower() for k in keywords])
             return [[record["source"], record["type"], record["target"]] for record in result]
 
     def clear_graph(self, team_id: str):
-        query = "MATCH (e:Entity {team_id: $team_id}) DETACH DELETE e"
+        query = "MATCH (e:Entity) DETACH DELETE e"
         with self._get_session(team_id) as session:
-            session.run(query, team_id=team_id)
+            session.run(query)

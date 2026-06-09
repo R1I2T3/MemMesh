@@ -30,26 +30,10 @@ def decay_memory_weights() -> dict:
             logger.info("Applying Neo4j memory decay for team: %s", team_id)
             try:
                 with neo4j_mgr._get_session(team_id) as session:
-                    # Decrement entity importance score
-                    session.run(
-                        "MATCH (e:Entity {team_id: $team_id}) SET e.importance_score = e.importance_score - 0.1",
-                        team_id=team_id
-                    )
-                    # Prune entities with low score
-                    session.run(
-                        "MATCH (e:Entity {team_id: $team_id}) WHERE e.importance_score <= 0.0 DETACH DELETE e",
-                        team_id=team_id
-                    )
-                    # Decrement relationship weights
-                    session.run(
-                        "MATCH ()-[r:RELATES_TO {team_id: $team_id}]->() SET r.weight = r.weight - 0.1",
-                        team_id=team_id
-                    )
-                    # Prune low weight relationships
-                    session.run(
-                        "MATCH ()-[r:RELATES_TO {team_id: $team_id}]->() WHERE r.weight <= 0.0 DELETE r",
-                        team_id=team_id
-                    )
+                    session.run("MATCH (e:Entity) SET e.importance_score = e.importance_score - 0.1")
+                    session.run("MATCH (e:Entity) WHERE e.importance_score <= 0.0 DETACH DELETE e")
+                    session.run("MATCH ()-[r:RELATES_TO]->() SET r.weight = r.weight - 0.1")
+                    session.run("MATCH ()-[r:RELATES_TO]->() WHERE r.weight <= 0.0 DELETE r")
             except Exception as team_neo4j_exc:
                 logger.error("Error decaying Neo4j entities/relationships for team %s: %s", team_id, team_neo4j_exc)
     except Exception as e:

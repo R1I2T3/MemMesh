@@ -5,7 +5,7 @@ from celery.result import AsyncResult
 from backend.tasks.celery_app import celery_app
 
 from backend.db.mysql import get_db
-from backend.auth.middleware import get_current_user
+from backend.auth.middleware import get_current_user, require_team_role
 from backend.models import Team, TeamMember, ParentDocument
 from backend.config import settings
 from backend.tasks.ingestion_worker import process_document_task
@@ -16,28 +16,11 @@ router = APIRouter(prefix="/api", tags=["upload"])
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
-    x_active_team_id: str | None = Header(default=None, alias="X-Active-Team-ID"),
+    x_active_team_id: str = Depends(require_team_role("team_lead")),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if not x_active_team_id:
-        raise HTTPException(status_code=400, detail="Missing X-Active-Team-ID header")
-
-    # Verify team existence
-    team = db.query(Team).filter_by(team_id=x_active_team_id).first()
-    if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
-
     user_id = current_user["sub"]
-    role = current_user.get("role")
-
-    # Ensure user is a member of the team (auto-join on first upload)
-    if role != "superadmin":
-        membership = db.query(TeamMember).filter_by(team_id=x_active_team_id, user_id=user_id).first()
-        if not membership:
-            membership = TeamMember(team_id=x_active_team_id, user_id=user_id, role="member")
-            db.add(membership)
-            db.commit()
 
     # Validate file size
     content = await file.read()

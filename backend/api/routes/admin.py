@@ -30,7 +30,7 @@ class UserCreate(BaseModel):
 class MemberAdd(BaseModel):
     team_id: str
     user_id: str
-    role: Literal["member", "admin", "owner"] = "member"
+    role: Literal["user", "team_lead"] = "user"
 
 # --- Teams — any authenticated user ---
 
@@ -76,10 +76,10 @@ def delete_team(
         raise HTTPException(status_code=404, detail="Team not found")
 
     membership = db.query(TeamMember).filter_by(
-        team_id=team_id, user_id=current_user["sub"], role="owner"
+        team_id=team_id, user_id=current_user["sub"], role="team_lead"
     ).first()
     if not membership and current_user.get("role") != "superadmin":
-        raise HTTPException(status_code=403, detail="Only team owners can delete the team")
+        raise HTTPException(status_code=403, detail="Only team leads can delete the team")
 
     db.delete(team)
     db.commit()
@@ -101,7 +101,7 @@ def add_member(
         membership = db.query(TeamMember).filter_by(
             team_id=payload.team_id, user_id=current_user["sub"]
         ).first()
-        if not membership or membership.role not in ("owner", "admin"):
+        if not membership or membership.role not in ("team_lead",):
             raise HTTPException(status_code=403, detail="Not authorized to manage team members")
 
     user = db.query(User).filter_by(user_id=payload.user_id).first()
@@ -157,7 +157,7 @@ def remove_member(
         membership = db.query(TeamMember).filter_by(
             team_id=team_id, user_id=current_user["sub"]
         ).first()
-        if not membership or membership.role not in ("owner", "admin"):
+        if not membership or membership.role not in ("team_lead",):
             raise HTTPException(status_code=403, detail="Not authorized to manage team members")
 
     member = db.query(TeamMember).filter_by(team_id=team_id, user_id=user_id).first()

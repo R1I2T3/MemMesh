@@ -35,7 +35,7 @@
 
 ## Phase 7: Citations & Feedback
 
-- [ ] Task 16: Citation Data Flow & PDF Viewer Drawer
+- [x] Task 16: Citation Data Flow & PDF Viewer Drawer
 - [ ] Task 17: RLHF Feedback Loop & DeepEval Metrics
 
 ## Phase 8: Production Hardening

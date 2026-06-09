@@ -34,7 +34,7 @@ class MemberAdd(BaseModel):
 
 # --- Teams — any authenticated user ---
 
-@user_router.post("/teams")
+@admin_router.post("/teams")
 def create_team(
     payload: TeamCreate,
     current_user: dict = Depends(get_current_user),
@@ -57,17 +57,15 @@ def create_team(
 
     db.flush()
 
-    # Auto-add creator as owner
-    creator_member = TeamMember(
-        team_id=team.team_id,
-        user_id=current_user["sub"],
-        role="owner",
-    )
-    db.add(creator_member)
     db.commit()
     return {"status": "created", "team_id": team.team_id}
 
-@user_router.delete("/teams/{team_id}")
+@admin_router.get("/teams")
+def list_teams(db: Session = Depends(get_db)):
+    teams = db.query(Team).all()
+    return {"teams": [{"team_id": t.team_id, "name": t.name} for t in teams]}
+
+@admin_router.delete("/teams/{team_id}")
 def delete_team(
     team_id: str,
     current_user: dict = Depends(get_current_user),
@@ -89,7 +87,7 @@ def delete_team(
 
 # --- Members — team owners / admins only ---
 
-@user_router.post("/members")
+@admin_router.post("/members")
 def add_member(
     payload: MemberAdd,
     current_user: dict = Depends(get_current_user),
@@ -119,7 +117,7 @@ def add_member(
     db.commit()
     return {"status": "added", "team_id": member.team_id, "user_id": member.user_id, "role": member.role}
 
-@user_router.get("/members")
+@admin_router.get("/members")
 def list_members(
     team_id: str | None = None,
     offset: int = Query(0, ge=0),
@@ -144,7 +142,7 @@ def list_members(
         "total": total,
     }
 
-@user_router.delete("/members")
+@admin_router.delete("/members")
 def remove_member(
     team_id: str,
     user_id: str,

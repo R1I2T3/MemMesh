@@ -9,6 +9,7 @@ import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UploadIcon, Loader2Icon, FileTextIcon, CheckCircle2Icon, XCircleIcon, AlertTriangleIcon } from 'lucide-react';
 import { validateFile, normalizeUploadStatus } from '../utils/upload';
+import { getStoredAuth } from '../utils/auth';
 
 export const Route = createRoute({
   getParentRoute: () => dashboardRoute,
@@ -67,6 +68,34 @@ function DocumentIngestionConsole() {
   const [success, setSuccess] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // DeepEval Metrics States
+  const [evalResults, setEvalResults] = useState<any[] | null>(null);
+  const [runningEval, setRunningEval] = useState(false);
+  const [evalError, setEvalError] = useState('');
+
+  const auth = getStoredAuth();
+  const isSuperAdmin = auth?.role === 'superadmin';
+
+  const runEvaluation = async () => {
+    setRunningEval(true);
+    setEvalResults(null);
+    setEvalError('');
+    try {
+      const res = await apiFetch('/api/eval', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setEvalResults(data);
+      } else {
+        const err = await res.json().catch(() => ({ detail: 'Evaluation failed' }));
+        setEvalError(err.detail || 'Evaluation failed');
+      }
+    } catch {
+      setEvalError('Network error during evaluation');
+    } finally {
+      setRunningEval(false);
+    }
+  };
 
   // Fetch teams
   const fetchTeams = useCallback(async () => {
@@ -383,6 +412,100 @@ function DocumentIngestionConsole() {
           </CardContent>
         </Card>
       </div>
+
+      {/* DeepEval Metrics Panel (Superadmin only) */}
+      {isSuperAdmin && (
+        <Card className="border-border bg-card">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center justify-between">
+              <span>DeepEval Metrics & RLHF Evaluation</span>
+              <Button
+                id="run-eval-btn"
+                onClick={runEvaluation}
+                disabled={runningEval}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium flex gap-2 items-center"
+              >
+                {runningEval ? (
+                  <>
+                    <Loader2Icon className="size-4 animate-spin" />
+                    <span>Evaluating...</span>
+                  </>
+                ) : (
+                  <span>Run DeepEval Metrics</span>
+                )}
+              </Button>
+            </CardTitle>
+            <CardDescription>
+              Evaluate user feedback query-response pairs against DeepEval's Faithfulness and Answer Relevancy metrics.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {evalError && <AlertBanner type="error" message={evalError} />}
+            
+            {evalResults && (
+              <div className="mt-2">
+                {('status' in evalResults && (evalResults as any).status === 'skipped') ? (
+                  <div className="flex items-center gap-2 p-3 rounded-lg text-sm bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                    <AlertTriangleIcon className="size-4 shrink-0" />
+                    <span>No user feedback ratings found to evaluate. Submit some feedback in Chat first.</span>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border rounded-md">
+                    <Table id="eval-results-table">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Feedback ID</TableHead>
+                          <TableHead>Query</TableHead>
+                          <TableHead>Response</TableHead>
+                          <TableHead className="w-[80px] text-center">Rating</TableHead>
+                          <TableHead className="w-[120px] text-center">Faithfulness</TableHead>
+                          <TableHead className="w-[120px] text-center">Relevancy</TableHead>
+                          <TableHead>Reason / Context</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(evalResults as any[]).map((result) => (
+                          <TableRow key={result.feedback_id} className="eval-result-row">
+                            <TableCell className="font-mono text-xs text-muted-foreground truncate max-w-[80px]" title={result.feedback_id}>
+                              {result.feedback_id.substring(0, 8)}...
+                            </TableCell>
+                            <TableCell className="truncate max-w-[150px]" title={result.query}>
+                              {result.query}
+                            </TableCell>
+                            <TableCell className="truncate max-w-[200px]" title={result.response}>
+                              {result.response}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {result.rating === 1 ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded bg-green-500/10 text-green-500 text-xs font-semibold font-mono">
+                                  +1
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded bg-red-500/10 text-red-500 text-xs font-semibold font-mono">
+                                  -1
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center font-mono font-medium text-indigo-600 dark:text-indigo-400">
+                              {(result.faithfulness_score * 100).toFixed(0)}%
+                            </TableCell>
+                            <TableCell className="text-center font-mono font-medium text-indigo-600 dark:text-indigo-400">
+                              {(result.relevancy_score * 100).toFixed(0)}%
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground" title={result.reason}>
+                              {result.reason}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Uploaded Documents Table */}
       <Card className="border-border bg-card">

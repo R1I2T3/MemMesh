@@ -20,7 +20,9 @@ import {
   Loader2Icon,
   AlertTriangleIcon,
   UserIcon,
-  BotIcon
+  BotIcon,
+  ThumbsUpIcon,
+  ThumbsDownIcon
 } from 'lucide-react';
 import {
   getLeafMessages,
@@ -136,6 +138,39 @@ function ChatInterfaceConsole() {
     }
 
     return <div className="whitespace-pre-wrap">{renderedParts}</div>;
+  };
+
+  // Ratings State for Feedback
+  const [ratings, setRatings] = useState<Record<string, number>>({});
+
+  // Handle Feedback Submission
+  const handleFeedback = async (msgId: string, rating: number) => {
+    const msg = messages.find((m) => m.message_id === msgId);
+    if (!msg) return;
+
+    const parentMsg = messages.find((m) => m.message_id === msg.parent_message_id);
+    const query = parentMsg ? parentMsg.content : 'Unknown Query';
+    const response = msg.content;
+    const traceId = `trace-${Date.now()}`;
+
+    try {
+      const res = await apiFetch('/api/feedback', {
+        method: 'POST',
+        body: JSON.stringify({
+          query,
+          response,
+          rating,
+          trace_id: traceId,
+        }),
+      });
+      if (res.ok) {
+        setRatings((prev) => ({ ...prev, [msgId]: rating }));
+      } else {
+        setError('Failed to submit feedback');
+      }
+    } catch {
+      setError('Failed to submit feedback due to network error');
+    }
   };
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -574,6 +609,31 @@ function ChatInterfaceConsole() {
                           : 'bg-card border-slate-200 dark:border-slate-800 text-foreground rounded-tl-none'
                       }`}>
                         {renderMessageContent(msg)}
+
+                        {!isUser && (
+                          <div className="flex items-center gap-2 mt-2 pt-1 border-t border-slate-100 dark:border-slate-800/50">
+                            <button
+                              type="button"
+                              onClick={() => handleFeedback(msg.message_id, 1)}
+                              className={`p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center ${
+                                ratings[msg.message_id] === 1 ? 'text-green-600 dark:text-green-400' : 'text-slate-400 hover:text-slate-600'
+                              }`}
+                              title="Thumbs Up"
+                            >
+                              <ThumbsUpIcon className="size-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleFeedback(msg.message_id, -1)}
+                              className={`p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center ${
+                                ratings[msg.message_id] === -1 ? 'text-red-600 dark:text-red-400' : 'text-slate-400 hover:text-slate-600'
+                              }`}
+                              title="Thumbs Down"
+                            >
+                              <ThumbsDownIcon className="size-4" />
+                            </button>
+                          </div>
+                        )}
 
                         {/* Hover Action Button for Branching */}
                         <div className={`absolute top-1/2 -translate-y-1/2 flex gap-1 transition-opacity opacity-0 group-hover:opacity-100 ${

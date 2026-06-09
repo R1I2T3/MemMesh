@@ -14,6 +14,8 @@ from backend.api.routes.auth import router as auth_router
 from backend.api.routes.admin import admin_router, user_router
 from backend.api.routes.upload import router as upload_router
 from backend.api.routes.query import router as query_router
+from backend.api.routes.feedback import router as feedback_router
+from backend.api.routes.eval import router as eval_router
 from backend.db.weaviate import get_weaviate_mgr, _weaviate_mgr
 
 logger = logging.getLogger(__name__)
@@ -82,6 +84,8 @@ app.include_router(user_router)
 app.include_router(admin_router)
 app.include_router(upload_router)
 app.include_router(query_router)
+app.include_router(feedback_router)
+app.include_router(eval_router)
 
 @app.get("/api/health")
 def health(db: Session = Depends(get_db)):

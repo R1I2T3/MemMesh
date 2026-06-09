@@ -22,7 +22,7 @@ def test_router_output():
         assert res.route == "graph"
         assert res.reasoning == "Relational query request"
         from backend.config import settings
-        mock_llm_cls.assert_called_once_with(model=settings.GEMINI_MODEL, temperature=0)
+        mock_llm_cls.assert_called_once_with(model=settings.GEMINI_MODEL, temperature=0, google_api_key=settings.GEMINI_API_KEY)
 
 def test_router_exception_fallback():
     with patch("backend.agents.router.ChatGoogleGenerativeAI") as mock_llm_cls:

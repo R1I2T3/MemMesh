@@ -328,18 +328,13 @@ def get_chat_messages(
 
 @router.get("/chat/sessions")
 def get_chat_sessions(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=200),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    try:
-        user_id = current_user.get("user_id") or current_user.get("sub")
-        results = (
-            db.query(Message.session_id)
-            .filter(Message.user_id == user_id)
-            .distinct()
-            .all()
-        )
-        return {"sessions": [r[0] for r in results if r[0]]}
-    except Exception as e:
-        logger.error(f"Failed to fetch chat sessions: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve session list")
+    user_id = current_user.get("user_id") or current_user.get("sub")
+    total_query = db.query(Message.session_id).filter(Message.user_id == user_id).distinct()
+    total = total_query.count()
+    results = total_query.order_by(Message.session_id).offset(offset).limit(limit).all()
+    return {"sessions": [r[0] for r in results if r[0]], "total": total}

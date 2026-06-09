@@ -60,7 +60,7 @@ def test_validation_exception_handler_returns_422():
 @pytest.fixture
 def mock_health_services():
     with patch("backend.agents.memory.get_redis_client") as mock_redis, \
-         patch("backend.db.weaviate.get_weaviate_mgr") as mock_weaviate, \
+         patch("backend.db.weaviate.WeaviateManager") as mock_weaviate, \
          patch("backend.db.neo4j.Neo4jManager") as mock_neo4j:
          
         # Mock Redis
@@ -104,7 +104,8 @@ def test_health_check_all_ok(mock_health_services):
         "neo4j": "ok"
     }
     
-    # Ensure Neo4j was closed
+    # Ensure services were closed
+    mock_health_services["weaviate"].close.assert_called_once()
     mock_health_services["neo4j"].close.assert_called_once()
 
 
@@ -171,6 +172,9 @@ def test_health_check_weaviate_fails(mock_health_services):
         "weaviate": "error",
         "neo4j": "ok"
     }
+    
+    # Ensure Weaviate close was still called in finally block
+    mock_health_services["weaviate"].close.assert_called_once()
 
 
 def test_health_check_neo4j_fails(mock_health_services):

@@ -30,7 +30,7 @@ def setup_db_and_dependencies():
     # Recreate tables cleanly for every single test
     Base.metadata.create_all(bind=engine)
     app.dependency_overrides[get_db] = override_get_db
-    with patch("backend.api.routes.admin.get_weaviate_mgr") as mock_get_mgr:
+    with patch("backend.api.routes.admin.WeaviateManager") as mock_get_mgr:
         mock_mgr = MagicMock()
         mock_get_mgr.return_value = mock_mgr
         yield
@@ -55,7 +55,7 @@ def test_create_team_as_superadmin():
     assert "team_id" in res.json()
 
 def test_create_team_weaviate_failure():
-    with patch("backend.api.routes.admin.get_weaviate_mgr") as mock_get_mgr:
+    with patch("backend.api.routes.admin.WeaviateManager") as mock_get_mgr:
         mock_mgr = MagicMock()
         mock_mgr.create_tenant.side_effect = Exception("Weaviate connection error")
         mock_get_mgr.return_value = mock_mgr

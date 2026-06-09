@@ -21,8 +21,7 @@ from backend.api.routes.query import router as query_router
 from backend.api.routes.feedback import router as feedback_router
 from backend.api.routes.eval import router as eval_router
 from backend.api.routes.decay import router as decay_router
-from backend.db.weaviate import get_weaviate_mgr
-from backend.db import weaviate as weaviate_db
+from backend.db.weaviate import WeaviateManager
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +38,9 @@ async def lifespan(app: FastAPI):
     logger.info("MemMesh starting up...")
     
     # Initialize Weaviate schema
+    weaviate_mgr = None
     try:
-        weaviate_mgr = get_weaviate_mgr()
+        weaviate_mgr = WeaviateManager()
         weaviate_mgr.ensure_schema()
         logger.info("Weaviate schema initialized successfully.")
     except Exception as e:
@@ -76,20 +76,11 @@ async def lifespan(app: FastAPI):
     
     # Close Weaviate client on shutdown
     try:
-        if weaviate_db._weaviate_mgr is not None:
+        if weaviate_mgr is not None:
             logger.info("Closing Weaviate client...")
-            weaviate_db._weaviate_mgr.close()
+            weaviate_mgr.close()
     except Exception as e:
         logger.error(f"Error closing Weaviate client: {e}")
-
-    # Close Neo4j driver on shutdown
-    try:
-        from backend.db.neo4j import _neo4j_mgr
-        if _neo4j_mgr is not None:
-            logger.info("Closing Neo4j driver...")
-            _neo4j_mgr.close()
-    except Exception as e:
-        logger.error(f"Error closing Neo4j driver: {e}")
 
     # Close Redis client on shutdown
     try:
@@ -167,12 +158,15 @@ def health(db: Session = Depends(get_db)):
         
     # 3. Weaviate check
     try:
-        from backend.db.weaviate import get_weaviate_mgr
-        weaviate_mgr = get_weaviate_mgr()
-        if weaviate_mgr.client.is_live():
-            statuses["weaviate"] = "ok"
-        else:
-            statuses["weaviate"] = "error"
+        from backend.db.weaviate import WeaviateManager
+        weaviate_mgr = WeaviateManager()
+        try:
+            if weaviate_mgr.client.is_live():
+                statuses["weaviate"] = "ok"
+            else:
+                statuses["weaviate"] = "error"
+        finally:
+            weaviate_mgr.close()
     except Exception as e:
         logger.error(f"Weaviate health check failed: {e}")
         statuses["weaviate"] = "error"

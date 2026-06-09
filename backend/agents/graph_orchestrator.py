@@ -34,7 +34,7 @@ def route_node(state: AgentState) -> Dict[str, Any]:
 
 def _retrieve_all(state: AgentState) -> Dict[str, Any]:
     import re
-    from backend.db.weaviate import get_weaviate_mgr
+    from backend.db.weaviate import WeaviateManager
     from backend.db.neo4j import Neo4jManager
     from backend.agents.retriever import retrieve_parent_documents
 
@@ -42,12 +42,16 @@ def _retrieve_all(state: AgentState) -> Dict[str, Any]:
     if state.get("rewritten_queries") and len(state["rewritten_queries"]) > 0:
         query = state["rewritten_queries"][0]
 
-    chunks = retrieve_parent_documents(
-        weaviate_mgr=get_weaviate_mgr(),
-        tenant_id=state["active_team_id"],
-        query=query,
-        current_user_id=state["user_id"]
-    )
+    weaviate_mgr = WeaviateManager()
+    try:
+        chunks = retrieve_parent_documents(
+            weaviate_mgr=weaviate_mgr,
+            tenant_id=state["active_team_id"],
+            query=query,
+            current_user_id=state["user_id"]
+        )
+    finally:
+        weaviate_mgr.close()
 
     STOP_WORDS = {"what", "is", "your", "who", "the", "a", "an", "of", "and", "in", "to", "for", "with", "on", "at", "by", "from", "how", "why", "are", "you", "i", "me", "my", "we", "us", "our"}
     words = re.findall(r"\b\w+\b", query.lower())
@@ -55,8 +59,9 @@ def _retrieve_all(state: AgentState) -> Dict[str, Any]:
 
     triples = []
     if keywords:
+        neo4j_mgr = Neo4jManager()
         try:
-            triples = Neo4jManager.get_instance().query_relationships(
+            triples = neo4j_mgr.query_relationships(
                 team_id=state["active_team_id"],
                 keywords=keywords
             )
@@ -64,6 +69,8 @@ def _retrieve_all(state: AgentState) -> Dict[str, Any]:
             import logging
             logger = logging.getLogger(__name__)
             logger.exception("Graph retrieval from Neo4j failed.")
+        finally:
+            neo4j_mgr.close()
 
     return {"retrieved_chunks": chunks, "retrieved_triples": triples}
 

@@ -8,7 +8,7 @@ from backend.db.mysql import get_db
 from backend.models import User, Team, TeamMember
 from backend.auth.middleware import get_current_user, require_global_role
 from backend.auth.passwords import hash_password
-from backend.db.weaviate import get_weaviate_mgr
+from backend.db.weaviate import WeaviateManager
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +48,11 @@ def create_team(
 
     # Provision tenant in Weaviate
     try:
-        weaviate_mgr = get_weaviate_mgr()
-        weaviate_mgr.create_tenant(team.team_id)
+        weaviate_mgr = WeaviateManager()
+        try:
+            weaviate_mgr.create_tenant(team.team_id)
+        finally:
+            weaviate_mgr.close()
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to create Weaviate tenant for team {team.team_id}: {e}")

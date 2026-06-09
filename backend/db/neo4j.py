@@ -9,23 +9,17 @@ logger = logging.getLogger(__name__)
 class Neo4jManager:
     _multidb_supported: bool | None = None
 
-    _instance: "Neo4jManager | None" = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance.driver = GraphDatabase.driver(
-                settings.NEO4J_URI,
-                auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
-                max_connection_pool_size=50,
-                connection_acquisition_timeout=30,
-            )
-        return cls._instance
+    def __init__(self):
+        self.driver = GraphDatabase.driver(
+            settings.NEO4J_URI,
+            auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+            max_connection_pool_size=50,
+            connection_acquisition_timeout=30,
+        )
 
     def close(self):
-        if Neo4jManager._instance and Neo4jManager._instance.driver:
-            Neo4jManager._instance.driver.close()
-            Neo4jManager._instance = None
+        if self.driver:
+            self.driver.close()
 
     def _get_session(self, team_id: str):
         db_name = f"team-{team_id}"

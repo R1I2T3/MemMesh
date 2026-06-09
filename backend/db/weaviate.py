@@ -103,10 +103,3 @@ class WeaviateManager:
     def close(self):
         self.client.close()
 
-_weaviate_mgr = None
-
-def get_weaviate_mgr() -> WeaviateManager:
-    global _weaviate_mgr
-    if _weaviate_mgr is None:
-        _weaviate_mgr = WeaviateManager()
-    return _weaviate_mgr

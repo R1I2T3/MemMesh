@@ -9,9 +9,12 @@ router = APIRouter(prefix="/api/admin", tags=["analytics"])
 
 
 @router.get("/analytics")
-def get_analytics(current_user: dict = Depends(require_global_role("superadmin"))):
-    redis_client = get_redis_client()
-    cached = redis_client.get("analytics:latest")
-    if cached:
-        return json.loads(cached)
+def get_analytics(_: dict = Depends(require_global_role("superadmin"))):
+    try:
+        redis_client = get_redis_client()
+        cached = redis_client.get("analytics:latest")
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        logger.warning("Failed to read analytics from Redis", exc_info=True)
     return {"message": "No analytics data yet. First aggregation runs hourly."}

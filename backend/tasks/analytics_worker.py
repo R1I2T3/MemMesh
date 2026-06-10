@@ -41,8 +41,11 @@ def aggregate_hourly(db=None):
         "total_feedback": feedback_ratings[1] or 0,
     }
 
-    redis_client = get_redis_client()
-    redis_client.set("analytics:latest", json.dumps(result), ex=3600)
+    try:
+        redis_client = get_redis_client()
+        redis_client.set("analytics:latest", json.dumps(result), ex=7200)
+    except Exception:
+        logger.warning("Failed to cache analytics in Redis", exc_info=True)
 
     if close_db:
         db.close()

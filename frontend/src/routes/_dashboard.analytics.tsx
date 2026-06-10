@@ -9,13 +9,24 @@ export const Route = createRoute({
   component: AnalyticsDashboard,
 });
 
+interface AnalyticsData {
+  queries_last_hour: number;
+  queries_last_day: number;
+  avg_latency_ms: number;
+  unique_users_last_day: number;
+  positive_feedback: number;
+  total_feedback: number;
+  message?: string;
+}
+
 function AnalyticsDashboard() {
-  const [analytics, setAnalytics] = useState<any>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch("/api/admin/analytics")
+    const controller = new AbortController();
+    apiFetch("/api/admin/analytics", { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
         return r.json();
@@ -25,9 +36,12 @@ function AnalyticsDashboard() {
         setLoading(false);
       })
       .catch((err) => {
-        setError(err.message);
-        setLoading(false);
+        if (err.name !== "AbortError") {
+          setError(err.message);
+          setLoading(false);
+        }
       });
+    return () => controller.abort();
   }, []);
 
   if (loading) return <div className="p-6 text-muted-foreground">Loading analytics...</div>;

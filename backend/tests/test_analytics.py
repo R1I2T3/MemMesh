@@ -32,7 +32,6 @@ def setup_db_and_dependencies():
     app.dependency_overrides[get_db] = override_get_db
     with patch("backend.api.routes.analytics.get_redis_client") as mock_redis:
         mock_redis_instance = MagicMock()
-        mock_redis.get.return_value = None
         mock_redis_instance.get.return_value = None
         mock_redis.return_value = mock_redis_instance
         yield

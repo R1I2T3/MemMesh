@@ -12,6 +12,7 @@ celery_app = Celery(
         "backend.tasks.decay_worker",
         "backend.tasks.drift_worker",
         "backend.api.routes.eval",
+        "backend.tasks.analytics_worker",
     ]
 )
 celery_app.conf.update(
@@ -30,6 +31,10 @@ celery_app.conf.beat_schedule = {
     "run-weekly-evaluation": {
         "task": "backend.api.routes.eval.run_scheduled_evaluation",
         "schedule": crontab(day_of_week=0, hour=3, minute=0),
+    },
+    "aggregate-analytics-hourly": {
+        "task": "backend.tasks.analytics_worker.aggregate_hourly",
+        "schedule": 3600.0,
     },
 }
 

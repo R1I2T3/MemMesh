@@ -132,6 +132,21 @@ class CrawlJob(Base):
     started_at = Column(DateTime, server_default=func.now())
     finished_at = Column(DateTime, nullable=True)
 
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=False, index=True)
+    query_text = Column(Text, nullable=False)
+    response_length = Column(Integer, nullable=True)
+    retrieval_sources = Column(JSON, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    __table_args__ = (
+        Index("idx_audit_team_time", "team_id", "created_at"),
+        Index("idx_audit_user_time", "user_id", "created_at"),
+    )
+
 class EvalScore(Base):
     __tablename__ = "eval_scores"
     id = Column(BigInteger, primary_key=True, autoincrement=True)

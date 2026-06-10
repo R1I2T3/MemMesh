@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import worker_process_init, worker_process_shutdown
 from backend.config import settings
 
@@ -10,6 +11,7 @@ celery_app = Celery(
         "backend.tasks.ingestion_worker",
         "backend.tasks.decay_worker",
         "backend.tasks.drift_worker",
+        "backend.api.routes.eval",
     ]
 )
 celery_app.conf.update(
@@ -25,6 +27,10 @@ celery_app.conf.update(
 celery_app.conf.beat_schedule = {
     "apply-memory-decay-hourly": {"task": "backend.tasks.decay_worker.decay_memory_weights", "schedule": 3600.0},
     "evaluate-drift-detection-daily": {"task": "backend.tasks.drift_worker.check_data_drift", "schedule": 86400.0},
+    "run-weekly-evaluation": {
+        "task": "backend.api.routes.eval.run_scheduled_evaluation",
+        "schedule": crontab(day_of_week=0, hour=3, minute=0),
+    },
 }
 
 

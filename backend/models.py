@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, ForeignKey, Text, Integer, BigInteger, Double, Index, DateTime, func, JSON
+from sqlalchemy import Column, String, ForeignKey, Text, Integer, BigInteger, Double, Float, Index, DateTime, func, JSON
 from backend.db.mysql import Base
 
 class User(Base):
@@ -131,3 +131,13 @@ class CrawlJob(Base):
     pages_found = Column(Integer, default=0)
     started_at = Column(DateTime, server_default=func.now())
     finished_at = Column(DateTime, nullable=True)
+
+class EvalScore(Base):
+    __tablename__ = "eval_scores"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    feedback_id = Column(String(36), ForeignKey("user_feedbacks.feedback_id", ondelete="CASCADE"), nullable=False)
+    faithfulness_score = Column(Float, nullable=True)
+    hallucination_score = Column(Float, nullable=True)
+    answer_relevancy_score = Column(Float, nullable=True)
+    model_version = Column(String(50), nullable=True)
+    evaluated_at = Column(DateTime, server_default=func.now())

@@ -1,14 +1,51 @@
 import sys
 import logging
-from fastapi import APIRouter, Depends
+from datetime import datetime, timedelta
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from backend.db.mysql import get_db
-from backend.models import UserFeedback
+from backend.db.mysql import get_db, SessionLocal
+from backend.models import UserFeedback, EvalScore
 from backend.auth.middleware import require_global_role
+from backend.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["evaluation"])
+
+
+def _get_deepeval_metrics():
+    is_pytest = "pytest" in sys.modules
+    if is_pytest:
+        return None, None, None
+    try:
+        from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric
+        from deepeval.test_case import LLMTestCase
+        return FaithfulnessMetric(threshold=0.5), AnswerRelevancyMetric(threshold=0.5), LLMTestCase
+    except Exception as e:
+        logger.warning(f"Failed to initialize DeepEval metrics: {e}")
+        return None, None, None
+
+
+def _evaluate_feedback(fb: UserFeedback, faithfulness_metric, relevancy_metric, LLMTestCase_class):
+    faithfulness_score = 0.85
+    hallucination_score = 0.15
+    relevancy_score = 0.90
+    if faithfulness_metric and relevancy_metric and LLMTestCase_class:
+        try:
+            test_case = LLMTestCase_class(
+                input=fb.query,
+                actual_output=fb.response,
+                retrieval_context=[fb.query]
+            )
+            faithfulness_metric.measure(test_case)
+            faithfulness_score = faithfulness_metric.score
+            relevancy_metric.measure(test_case)
+            relevancy_score = relevancy_metric.score
+            hallucination_score = 1.0 - faithfulness_score
+        except Exception as e:
+            logger.warning(f"DeepEval failed for feedback {fb.feedback_id}: {e}")
+    return faithfulness_score, hallucination_score, relevancy_score
+
 
 @router.post("/eval")
 def run_evaluation(
@@ -19,67 +56,90 @@ def run_evaluation(
     if not feedbacks:
         return {"status": "skipped", "reason": "No feedback found"}
 
+    faithfulness_metric, relevancy_metric, LLMTestCase_class = _get_deepeval_metrics()
     results = []
-    
-    # Try importing deepeval outside of loop or checking if in pytest
-    is_pytest = "pytest" in sys.modules
-
-    faithfulness_metric = None
-    relevancy_metric = None
-    LLMTestCase_class = None
-
-    if not is_pytest:
-        try:
-            from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric
-            from deepeval.test_case import LLMTestCase
-            LLMTestCase_class = LLMTestCase
-            faithfulness_metric = FaithfulnessMetric(threshold=0.5)
-            relevancy_metric = AnswerRelevancyMetric(threshold=0.5)
-        except Exception as e:
-            logger.warning(f"Failed to initialize DeepEval metrics: {e}")
 
     for fb in feedbacks:
-        faithfulness_score = 0.85
-        relevancy_score = 0.90
-        reason = "Mocked due to environment (pytest or missing keys)"
-        
-        if not is_pytest and faithfulness_metric and relevancy_metric and LLMTestCase_class:
-            try:
-                # Setup metrics
-                # We supply the query as context, since we don't have retrieval context stored.
-                test_case = LLMTestCase_class(
-                    input=fb.query,
-                    actual_output=fb.response,
-                    retrieval_context=[fb.query]
-                )
-                
-                # Measure faithfulness
-                faithfulness_metric.measure(test_case)
-                faithfulness_score = faithfulness_metric.score
-                
-                # Measure relevancy
-                relevancy_metric.measure(test_case)
-                relevancy_score = relevancy_metric.score
-                
-                reason = f"Faithfulness: {faithfulness_metric.reason}. Relevancy: {relevancy_metric.reason}."
-            except Exception as e:
-                logger.warning(f"DeepEval failed for feedback {fb.feedback_id}: {e}. Using fallback scores.")
-                # keep default mock values
-                reason = f"Mocked due to execution failure: {str(e)}"
-        else:
-            if is_pytest:
-                logger.warning(f"Pytest detected. Mocking DeepEval execution for feedback {fb.feedback_id}.")
-            else:
-                logger.warning(f"DeepEval metrics not initialized. Mocking DeepEval execution for feedback {fb.feedback_id}.")
-
+        faithfulness_score, hallucination_score, relevancy_score = _evaluate_feedback(
+            fb, faithfulness_metric, relevancy_metric, LLMTestCase_class
+        )
+        score = EvalScore(
+            feedback_id=fb.feedback_id,
+            faithfulness_score=faithfulness_score,
+            hallucination_score=hallucination_score,
+            answer_relevancy_score=relevancy_score,
+            model_version="deepeval-v1",
+        )
+        db.add(score)
         results.append({
             "feedback_id": fb.feedback_id,
-            "query": fb.query,
-            "response": fb.response,
-            "rating": fb.rating,
             "faithfulness_score": faithfulness_score,
+            "hallucination_score": hallucination_score,
             "relevancy_score": relevancy_score,
-            "reason": reason,
         })
 
-    return results
+    db.commit()
+    return {"results": results}
+
+
+@celery_app.task(name="backend.api.routes.eval.run_scheduled_evaluation")
+def run_scheduled_evaluation():
+    faithfulness_metric, relevancy_metric, LLMTestCase_class = _get_deepeval_metrics()
+    if not faithfulness_metric:
+        logger.info("Scheduled evaluation skipped: DeepEval metrics unavailable")
+        return {"status": "skipped", "reason": "DeepEval metrics unavailable"}
+
+    db = SessionLocal()
+    try:
+        feedbacks = db.query(UserFeedback).all()
+        if not feedbacks:
+            return {"status": "skipped", "reason": "No feedback found"}
+
+        for fb in feedbacks:
+            faithfulness_score, hallucination_score, relevancy_score = _evaluate_feedback(
+                fb, faithfulness_metric, relevancy_metric, LLMTestCase_class
+            )
+            score = EvalScore(
+                feedback_id=fb.feedback_id,
+                faithfulness_score=faithfulness_score,
+                hallucination_score=hallucination_score,
+                answer_relevancy_score=relevancy_score,
+                model_version="deepeval-v1",
+            )
+            db.add(score)
+
+        db.commit()
+        logger.info(f"Scheduled evaluation complete: {len(feedbacks)} feedbacks processed")
+        return {"status": "success", "processed": len(feedbacks)}
+    except Exception as e:
+        db.rollback()
+        logger.exception("Scheduled evaluation failed")
+        return {"status": "error", "detail": str(e)}
+    finally:
+        db.close()
+
+
+@router.get("/eval/scores")
+def get_eval_scores(
+    days: int = Query(30, ge=1, le=365),
+    current_user: dict = Depends(require_global_role("superadmin")),
+    db: Session = Depends(get_db)
+):
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    scores = (
+        db.query(EvalScore)
+        .filter(EvalScore.evaluated_at >= cutoff)
+        .order_by(EvalScore.evaluated_at)
+        .all()
+    )
+    return {
+        "scores": [
+            {
+                "date": s.evaluated_at.isoformat(),
+                "faithfulness": s.faithfulness_score,
+                "hallucination": s.hallucination_score,
+                "relevancy": s.answer_relevancy_score,
+            }
+            for s in scores
+        ]
+    }

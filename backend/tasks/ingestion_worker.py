@@ -42,7 +42,7 @@ from backend.db.weaviate import WeaviateManager
 from backend.db.neo4j import Neo4jManager
 from backend.ingestion.parser import ConversionError, UnsupportedFormatError, load_documents
 from backend.ingestion.extractor import extract_entities_and_relationships
-from backend.models import ParentDocument
+from backend.models import ParentDocument, SourceDoc
 from backend.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,8 @@ def process_document_task(
     filename: str,
     team_id: str,
     user_id: str,
+    version_number: int = 1,
+    previous_version_id: str | None = None,
 ) -> str:
     """Parse a document and index its chunks into MySQL + Weaviate.
 
@@ -98,6 +100,7 @@ def process_document_task(
             → temp file  (extension preserved for Docling format detection)
             → load_documents()  (DOC_CHUNKS: parse + layout-aware chunk)
             → MySQL ParentDocument  (full Markdown assembled from chunks)
+            → MySQL SourceDoc  (versioning metadata)
             → Weaviate batch insert  (per-chunk, under team tenant shard)
             → temp file cleanup
 
@@ -177,7 +180,39 @@ def process_document_task(
             db.close()
 
         # ----------------------------------------------------------------
-        # 3. Batch-insert chunks into Weaviate
+        # 3. Persist SourceDoc record (versioning metadata)
+        # ----------------------------------------------------------------
+        content_hash = hashlib.sha256(file_bytes).hexdigest()
+        file_format = suffix.lstrip(".") if suffix else "bin"
+        try:
+            source_stmt = (
+                mysql_insert(SourceDoc)
+                .values(
+                    doc_id=parent_id,
+                    team_id=team_id,
+                    source_type="upload",
+                    source_ref=filename,
+                    file_name=filename,
+                    file_format=file_format,
+                    content_hash=content_hash,
+                    uploaded_by=user_id,
+                    status="completed",
+                    version_number=version_number,
+                    previous_version_id=previous_version_id,
+                )
+                .prefix_with("IGNORE")
+            )
+            db.execute(source_stmt)
+            db.commit()
+            logger.info(
+                "Saved SourceDoc %s v%d for team %s", parent_id, version_number, team_id
+            )
+        except Exception:
+            db.rollback()
+            raise
+
+        # ----------------------------------------------------------------
+        # 4. Batch-insert chunks into Weaviate
         # ----------------------------------------------------------------
         if docs:
             weaviate_chunks = [
@@ -211,7 +246,7 @@ def process_document_task(
                 weaviate_mgr.close()
 
             # ----------------------------------------------------------------
-            # 4. Extract entities and relationships (once from full doc) and write to Neo4j
+            # 5. Extract entities and relationships (once from full doc) and write to Neo4j
             # ----------------------------------------------------------------
             neo4j_mgr = Neo4jManager()
             try:

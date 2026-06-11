@@ -190,10 +190,15 @@ class TestProcessDocumentTask:
                 user_id="u1",
             )
 
-        stmt = mock_db.execute.call_args[0][0]
-        compiled = str(stmt.compile(
-            compile_kwargs={"literal_binds": True},
-        ))
+        # Find the ParentDocument INSERT among all execute calls
+        compiled = None
+        for args in mock_db.execute.call_args_list:
+            s = args[0][0]
+            c = str(s.compile(compile_kwargs={"literal_binds": True}))
+            if "parent_documents" in c.lower():
+                compiled = c
+                break
+        assert compiled is not None, "No ParentDocument INSERT found"
         assert "Part A" in compiled
         assert "Part B" in compiled
         # Verify they are joined with double-newline

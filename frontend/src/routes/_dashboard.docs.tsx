@@ -26,6 +26,7 @@ interface DocumentItem {
   parent_id: string;
   filename: string;
   created_at: string | null;
+  version_number?: number;
 }
 
 interface UploadTask {
@@ -720,6 +721,7 @@ function DocumentIngestionConsole() {
                   <TableRow>
                     <TableHead>Filename</TableHead>
                     <TableHead>Document ID</TableHead>
+                    <TableHead className="w-[100px]">Version</TableHead>
                     <TableHead className="w-[200px]">Ingested At</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -729,6 +731,9 @@ function DocumentIngestionConsole() {
                       <TableCell className="font-medium">{doc.filename}</TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">
                         {doc.parent_id}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        v{doc.version_number ?? 1}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {doc.created_at ? new Date(doc.created_at).toLocaleString() : 'N/A'}

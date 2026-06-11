@@ -219,3 +219,14 @@ def test_member_crud_flow():
     # Remove member 404
     rem_res2 = client.delete(f"/api/admin/members?team_id={team_id}&user_id={user_id}", headers=get_superadmin_headers())
     assert rem_res2.status_code == 404
+
+
+@patch("backend.cache.semantic_cache.SemanticCache")
+def test_cache_flush(mock_semantic_cache_cls):
+    mock_semantic_cache = MagicMock()
+    mock_semantic_cache_cls.return_value = mock_semantic_cache
+
+    res = client.post("/api/admin/cache/flush", headers=get_superadmin_headers())
+    assert res.status_code == 200
+    assert res.json() == {"status": "cache flushed"}
+    mock_semantic_cache.flush.assert_called_once()

@@ -204,3 +204,10 @@ def delete_user(user_id: str, db: Session = Depends(get_db)):
     db.delete(user)
     db.commit()
     return {"status": "deleted"}
+
+
+@admin_router.post("/cache/flush")
+def flush_cache():
+    from backend.cache.semantic_cache import SemanticCache
+    SemanticCache().flush()
+    return {"status": "cache flushed"}

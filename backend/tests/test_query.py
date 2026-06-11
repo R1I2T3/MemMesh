@@ -55,9 +55,15 @@ def test_query_input_validation():
     res = client.post("/api/query", json={"query": long_q}, headers=headers)
     assert res.status_code == 422
 
+@patch("backend.cache.semantic_cache.SemanticCache")
 @patch("backend.api.routes.query.RedisMemory")
 @patch("backend.api.routes.query.get_graph")
-def test_linear_query_flow(mock_get_graph, mock_redis_memory_cls):
+def test_linear_query_flow(mock_get_graph, mock_redis_memory_cls, mock_semantic_cache_cls):
+    # Setup SemanticCache mock (cache miss)
+    mock_semantic_cache = MagicMock()
+    mock_semantic_cache.get.return_value = None
+    mock_semantic_cache_cls.return_value = mock_semantic_cache
+
     # Setup LangGraph mock
     mock_graph = MagicMock()
     mock_get_graph.return_value = mock_graph
@@ -83,9 +89,19 @@ def test_linear_query_flow(mock_get_graph, mock_redis_memory_cls):
     mock_redis.save_message.assert_any_call("session-123", "user", "what is this")
     mock_redis.save_message.assert_any_call("session-123", "assistant", "LangGraph mock response")
 
+    # Verify cache was checked
+    mock_semantic_cache.get.assert_called_once_with("what is this")
+    mock_semantic_cache.set.assert_called_once()
+
+@patch("backend.cache.semantic_cache.SemanticCache")
 @patch("backend.api.routes.query.RedisMemory")
 @patch("backend.api.routes.query.get_graph")
-def test_branching_query_flow(mock_get_graph, mock_redis_memory_cls):
+def test_branching_query_flow(mock_get_graph, mock_redis_memory_cls, mock_semantic_cache_cls):
+    # Setup SemanticCache mock (cache miss)
+    mock_semantic_cache = MagicMock()
+    mock_semantic_cache.get.return_value = None
+    mock_semantic_cache_cls.return_value = mock_semantic_cache
+
     # Setup database with existing parent message
     db = TestingSessionLocal()
     parent_msg = Message(
@@ -157,9 +173,15 @@ def test_get_chat_sessions():
     assert "sess-abc" in data["sessions"]
     assert "sess-xyz" in data["sessions"]
 
+@patch("backend.cache.semantic_cache.SemanticCache")
 @patch("backend.api.routes.query.RedisMemory")
 @patch("backend.api.routes.query.get_graph")
-def test_query_includes_citations(mock_get_graph, mock_redis_memory_cls):
+def test_query_includes_citations(mock_get_graph, mock_redis_memory_cls, mock_semantic_cache_cls):
+    # Setup SemanticCache mock (cache miss)
+    mock_semantic_cache = MagicMock()
+    mock_semantic_cache.get.return_value = None
+    mock_semantic_cache_cls.return_value = mock_semantic_cache
+
     mock_graph = MagicMock()
     mock_get_graph.return_value = mock_graph
     
@@ -252,3 +274,42 @@ async def test_streaming_endpoint(mock_ainvoke, mock_redis_cls):
     mock_redis.save_message.assert_any_call("test-session", "assistant", "Hello")
 
 
+@patch("backend.cache.semantic_cache.SemanticCache")
+@patch("backend.api.routes.query.RedisMemory")
+@patch("backend.api.routes.query.get_graph")
+def test_query_cache_hit_returns_cached_response(
+    mock_get_graph, mock_redis_memory_cls, mock_semantic_cache_cls
+):
+    cached_response = {
+        "response": "cached answer",
+        "message_id": "cached-msg-id",
+        "user_message_id": "cached-user-msg-id",
+        "session_id": "session-cache",
+        "parent_message_id": "cached-user-msg-id",
+        "citations": [{"id": 1, "parent_id": "doc-1"}]
+    }
+
+    mock_semantic_cache = MagicMock()
+    mock_semantic_cache.get.return_value = cached_response
+    mock_semantic_cache_cls.return_value = mock_semantic_cache
+
+    mock_graph = MagicMock()
+    mock_get_graph.return_value = mock_graph
+
+    mock_redis = MagicMock()
+    mock_redis_memory_cls.return_value = mock_redis
+
+    headers = get_auth_headers()
+    res = client.post(
+        "/api/query",
+        json={"query": "cached question", "session_id": "session-cache"},
+        headers=headers
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data == cached_response
+
+    # graph.invoke should NOT be called on cache hit
+    mock_graph.invoke.assert_not_called()
+    # Redis save should NOT be called on cache hit
+    mock_redis.save_message.assert_not_called()

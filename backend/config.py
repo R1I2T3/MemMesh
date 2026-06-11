@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     MAX_UPLOAD_SIZE_MB: int = 50
 
+    SEMANTIC_CACHE_TTL: int = 86400  # 24 hours
+    SEMANTIC_CACHE_THRESHOLD: float = 0.92
+
     RATE_LIMIT_LOGIN: str = "5/minute"
     RATE_LIMIT_REGISTER: str = "3/minute"
     RATE_LIMIT_QUERY: str = "30/minute"

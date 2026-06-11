@@ -47,6 +47,14 @@ def run_query(
     # 2. Context history reconstruction
     history = _load_history(db, payload.session_id, payload.parent_msg_id, user_id)
 
+    # 2b. Semantic cache check (skip graph invoke, output validation, DB persist, Redis save on hit)
+    from backend.cache.semantic_cache import SemanticCache
+    cache = SemanticCache()
+    cached_result = cache.get(validated_q)
+    if cached_result:
+        logger.info(f"Cache HIT for query: {validated_q[:50]}...")
+        return cached_result
+
     # 3. Invoke LangGraph orchestrator
     graph = get_graph()
     try:
@@ -118,6 +126,16 @@ def run_query(
             memory.save_message(payload.session_id, "assistant", validated_response)
         except Exception as redis_err:
             logger.warning(f"Failed to save messages to Redis memory: {redis_err}")
+
+    # Cache the result for future semantic matches
+    cache.set(validated_q, {
+        "response": validated_response,
+        "message_id": assistant_msg_id,
+        "user_message_id": user_msg_id,
+        "session_id": payload.session_id,
+        "parent_message_id": user_msg_id,
+        "citations": result.get("citations", [])
+    })
 
     return {
         "response": validated_response,

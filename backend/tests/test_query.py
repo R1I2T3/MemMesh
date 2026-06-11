@@ -282,10 +282,6 @@ def test_query_cache_hit_returns_cached_response(
 ):
     cached_response = {
         "response": "cached answer",
-        "message_id": "cached-msg-id",
-        "user_message_id": "cached-user-msg-id",
-        "session_id": "session-cache",
-        "parent_message_id": "cached-user-msg-id",
         "citations": [{"id": 1, "parent_id": "doc-1"}]
     }
 
@@ -307,7 +303,13 @@ def test_query_cache_hit_returns_cached_response(
     )
     assert res.status_code == 200
     data = res.json()
-    assert data == cached_response
+    assert data["response"] == "cached answer"
+    assert data["session_id"] == "session-cache"
+    assert data["citations"] == [{"id": 1, "parent_id": "doc-1"}]
+    # Fresh message IDs are generated on cache hit
+    assert data["message_id"] != "cached-msg-id"
+    assert data["user_message_id"] != "cached-user-msg-id"
+    assert data["parent_message_id"] == data["user_message_id"]
 
     # graph.invoke should NOT be called on cache hit
     mock_graph.invoke.assert_not_called()

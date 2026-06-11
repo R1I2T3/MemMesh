@@ -48,12 +48,22 @@ def run_query(
     history = _load_history(db, payload.session_id, payload.parent_msg_id, user_id)
 
     # 2b. Semantic cache check (skip graph invoke, output validation, DB persist, Redis save on hit)
-    from backend.cache.semantic_cache import SemanticCache
-    cache = SemanticCache()
+    from backend.cache.semantic_cache import get_cache
+    cache = get_cache()
     cached_result = cache.get(validated_q)
     if cached_result:
         logger.info(f"Cache HIT for query: {validated_q[:50]}...")
-        return cached_result
+        # Generate fresh message IDs for the current session
+        hit_user_msg_id = str(uuid.uuid4())
+        hit_assistant_msg_id = str(uuid.uuid4())
+        return {
+            "response": cached_result["response"],
+            "message_id": hit_assistant_msg_id,
+            "user_message_id": hit_user_msg_id,
+            "session_id": payload.session_id,
+            "parent_message_id": hit_user_msg_id,
+            "citations": cached_result.get("citations", [])
+        }
 
     # 3. Invoke LangGraph orchestrator
     graph = get_graph()
@@ -127,15 +137,18 @@ def run_query(
         except Exception as redis_err:
             logger.warning(f"Failed to save messages to Redis memory: {redis_err}")
 
-    # Cache the result for future semantic matches
-    cache.set(validated_q, {
-        "response": validated_response,
-        "message_id": assistant_msg_id,
-        "user_message_id": user_msg_id,
-        "session_id": payload.session_id,
-        "parent_message_id": user_msg_id,
-        "citations": result.get("citations", [])
-    })
+    # Cache the result for future semantic matches (non-blocking — fire and forget)
+    try:
+        cache.set(validated_q, {
+            "response": validated_response,
+            "message_id": assistant_msg_id,
+            "user_message_id": user_msg_id,
+            "session_id": payload.session_id,
+            "parent_message_id": user_msg_id,
+            "citations": result.get("citations", [])
+        })
+    except Exception as cache_err:
+        logger.warning(f"Failed to cache result: {cache_err}")
 
     return {
         "response": validated_response,

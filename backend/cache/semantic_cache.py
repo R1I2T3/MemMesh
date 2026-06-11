@@ -5,9 +5,18 @@ import logging
 from typing import Any, Dict, Optional
 from backend.agents.memory import get_redis_client
 from backend.config import settings
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from backend.db.weaviate import GoogleGenerativeAIEmbeddings
 
 logger = logging.getLogger(__name__)
+
+_cache_instance = None
+
+
+def get_cache() -> "SemanticCache":
+    global _cache_instance
+    if _cache_instance is None:
+        _cache_instance = SemanticCache()
+    return _cache_instance
 
 
 class SemanticCache:

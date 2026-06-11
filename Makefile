@@ -1,34 +1,22 @@
-.PHONY: stack-up stack-down test-unit test-e2e format lint
-
-PID_DIR := .pids
-
-stack-up: | $(PID_DIR)
+compose-up:
 	docker compose up -d
-	@echo "Starting uvicorn on port 7777..."
-	uv run uvicorn agentos:app --port 7777 --reload & echo $$! > $(PID_DIR)/uvicorn.pid
-	@echo "Starting Next.js dev server..."
-	(cd frontend && npm run dev) & echo $$! > $(PID_DIR)/next.pid
-	@echo "Stack is up. PIDs tracked in $(PID_DIR)/"
-
-stack-down:
-	docker compose down
-	@if [ -f $(PID_DIR)/uvicorn.pid ]; then \
-		kill $$(cat $(PID_DIR)/uvicorn.pid) 2>/dev/null || true; \
-		rm -f $(PID_DIR)/uvicorn.pid; \
-	fi
-	@if [ -f $(PID_DIR)/next.pid ]; then \
-		kill $$(cat $(PID_DIR)/next.pid) 2>/dev/null || true; \
-		rm -f $(PID_DIR)/next.pid; \
-	fi
-	@echo "Stack is down."
-
-$(PID_DIR):
-	mkdir -p $(PID_DIR)
-
-test-unit:
-	uv run pytest tests/unit -v
-
+dev-backend:
+	uv run --project backend uvicorn backend.main:app --reload
+dev-frontend:
+	cd frontend && npm run dev
+dev-worker:
+	uv run --project backend celery -A backend.tasks.celery_app worker --loglevel=info
+test: test-backend test-frontend test-e2e
+test-backend:
+	uv run --project backend pytest backend/tests/ -v
+test-frontend:
+	cd frontend && npx vitest run
 test-e2e:
-	uv run pytest tests/e2e -m e2e -v
-
-test-all: test-unit test-e2e
+	npx playwright test
+production-up: compose-up
+	cd frontend && npm run build
+	uv run --project backend uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 4
+db-migrate:
+	cd backend && uv run alembic revision --autogenerate -m "auto"
+db-upgrade:
+	cd backend && uv run alembic upgrade head

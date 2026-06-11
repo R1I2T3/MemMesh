@@ -49,7 +49,7 @@ class TestDetectVersionChange:
             MockSession.return_value = mock_db
             mock_query = mock_db.query.return_value
             mock_filter = mock_query.filter_by.return_value
-            mock_filter.order_by.return_value.first.return_value = None
+            mock_filter.with_for_update.return_value.order_by.return_value.first.return_value = None
 
             result = detect_version_change(
                 team_id="team-1",
@@ -71,7 +71,7 @@ class TestDetectVersionChange:
         with patch("backend.ingestion.versioning.SessionLocal") as MockSession:
             mock_db = MagicMock()
             MockSession.return_value = mock_db
-            mock_db.query.return_value.filter_by.return_value.order_by.return_value.first.return_value = existing
+            mock_db.query.return_value.filter_by.return_value.with_for_update.return_value.order_by.return_value.first.return_value = existing
 
             result = detect_version_change(
                 team_id="team-1",
@@ -93,7 +93,7 @@ class TestDetectVersionChange:
         with patch("backend.ingestion.versioning.SessionLocal") as MockSession:
             mock_db = MagicMock()
             MockSession.return_value = mock_db
-            mock_db.query.return_value.filter_by.return_value.order_by.return_value.first.return_value = existing
+            mock_db.query.return_value.filter_by.return_value.with_for_update.return_value.order_by.return_value.first.return_value = existing
 
             result = detect_version_change(
                 team_id="team-1",
@@ -124,13 +124,15 @@ class TestDetectVersionChange:
             team_id="team-x",
             file_name="report.docx",
         )
+        mock_db.query.return_value.filter_by.return_value.with_for_update.assert_called_once()
+        mock_db.query.return_value.filter_by.return_value.with_for_update.return_value.order_by.assert_called_once()
 
     def test_closes_db_session(self):
         """Session is always closed after detection."""
         with patch("backend.ingestion.versioning.SessionLocal") as MockSession:
             mock_db = MagicMock()
             MockSession.return_value = mock_db
-            mock_db.query.return_value.filter_by.return_value.order_by.return_value.first.return_value = None
+            mock_db.query.return_value.filter_by.return_value.with_for_update.return_value.order_by.return_value.first.return_value = None
 
             detect_version_change(team_id="t", filename="f.pdf", new_hash="h")
 

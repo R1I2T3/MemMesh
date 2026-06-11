@@ -8,7 +8,7 @@ from backend.db.mysql import get_db
 from backend.auth.middleware import get_current_user, require_team_role
 from backend.models import Team, TeamMember, ParentDocument, SourceDoc
 from backend.config import settings
-from backend.ingestion.versioning import compute_content_hash, detect_version_change
+from backend.ingestion.versioning import compute_content_hash
 from backend.tasks.ingestion_worker import process_document_task
 
 logger = logging.getLogger(__name__)
@@ -28,24 +28,16 @@ async def upload_document(
     if len(content) > settings.max_upload_bytes:
         raise HTTPException(status_code=413, detail="File size exceeds maximum allowed limit")
 
-    # Detect version changes
+    # Compute hash and dispatch ingestion task (version detection happens in worker)
     file_hash = compute_content_hash(content)
-    version_info = detect_version_change(x_active_team_id, file.filename, file_hash)
-    if version_info:
-        logger.info("New version detected: %s", version_info)
 
-    # Dispatch ingestion task with version info if applicable
-    task_kwargs = dict(
+    task = process_document_task.delay(
         hex_content=content.hex(),
         filename=file.filename,
         team_id=x_active_team_id,
         user_id=user_id,
+        content_hash=file_hash,
     )
-    if version_info:
-        task_kwargs["version_number"] = version_info["new_version"]
-        task_kwargs["previous_version_id"] = version_info["previous_version_id"]
-
-    task = process_document_task.delay(**task_kwargs)
     return {"status": "processing", "task_id": task.id}
 
 @router.get("/upload/status/{task_id}")

@@ -88,6 +88,7 @@ def process_document_task(
     filename: str,
     team_id: str,
     user_id: str,
+    content_hash: str,
     version_number: int = 1,
     previous_version_id: str | None = None,
 ) -> str:
@@ -156,11 +157,12 @@ def process_document_task(
         markdown_content = "\n\n".join(doc.page_content for doc in docs)
 
         # ----------------------------------------------------------------
-        # 2. Persist ParentDocument in MySQL (idempotent via INSERT IGNORE)
+        # 2+3. Persist ParentDocument + SourceDoc in same session (version
+        #      detection runs inside the transaction with FOR UPDATE)
         # ----------------------------------------------------------------
         db = SessionLocal()
         try:
-            stmt = (
+            parent_stmt = (
                 mysql_insert(ParentDocument)
                 .values(
                     parent_id=parent_id,
@@ -168,23 +170,19 @@ def process_document_task(
                     content=markdown_content,
                     team_id=team_id,
                 )
-                .prefix_with("IGNORE")  # silently skips duplicate PKs on retry
+                .prefix_with("IGNORE")
             )
-            db.execute(stmt)
-            db.commit()
-            logger.info("Saved ParentDocument %s for team %s", parent_id, team_id)
-        except Exception:
-            db.rollback()
-            raise
-        finally:
-            db.close()
+            db.execute(parent_stmt)
 
-        # ----------------------------------------------------------------
-        # 3. Persist SourceDoc record (versioning metadata)
-        # ----------------------------------------------------------------
-        content_hash = hashlib.sha256(file_bytes).hexdigest()
-        file_format = suffix.lstrip(".") if suffix else "bin"
-        try:
+            # Version detection within the same transaction — FOR UPDATE
+            # prevents concurrent uploads from racing on version numbers.
+            from backend.ingestion.versioning import detect_version_change
+            version_info = detect_version_change(team_id, filename, content_hash, db=db)
+            if version_info:
+                version_number = version_info["new_version"]
+                previous_version_id = version_info["previous_version_id"]
+
+            file_format = suffix.lstrip(".") if suffix else "bin"
             source_stmt = (
                 mysql_insert(SourceDoc)
                 .values(
@@ -205,11 +203,14 @@ def process_document_task(
             db.execute(source_stmt)
             db.commit()
             logger.info(
-                "Saved SourceDoc %s v%d for team %s", parent_id, version_number, team_id
+                "Saved ParentDocument %s + SourceDoc v%d for team %s",
+                parent_id, version_number, team_id,
             )
         except Exception:
             db.rollback()
             raise
+        finally:
+            db.close()
 
         # ----------------------------------------------------------------
         # 4. Batch-insert chunks into Weaviate
@@ -242,6 +243,10 @@ def process_document_task(
                     len(weaviate_chunks),
                     team_id,
                 )
+
+                if previous_version_id:
+                    from backend.ingestion.versioning import mark_superseded_chunks
+                    mark_superseded_chunks(weaviate_mgr, team_id, previous_version_id)
             finally:
                 weaviate_mgr.close()
 

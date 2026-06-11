@@ -25,7 +25,8 @@ import {
   UserIcon,
   BotIcon,
   ThumbsUpIcon,
-  ThumbsDownIcon
+  ThumbsDownIcon,
+  FileDownIcon
 } from 'lucide-react';
 import {
   getLeafMessages,
@@ -566,6 +567,24 @@ function ChatInterfaceConsole() {
               </div>
             </div>
           )}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`/api/chat/sessions/${activeSessionId}/export?format=md`, '_blank')}
+            >
+              <FileDownIcon className="size-3.5 mr-1" />
+              Export MD
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`/api/chat/sessions/${activeSessionId}/export?format=json`, '_blank')}
+            >
+              <FileDownIcon className="size-3.5 mr-1" />
+              Export JSON
+            </Button>
+          </div>
         </div>
 
         {/* Error Alert */}

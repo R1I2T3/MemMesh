@@ -9,7 +9,7 @@ def test_neo4j_manager_lifecycle():
         mock_driver.return_value.close.assert_called_once()
 
 def test_get_entities_for_explore_with_query():
-    Neo4jManager._multidb_supported = None
+    Neo4jManager._multidb_supported = True
     with patch("backend.db.neo4j.GraphDatabase.driver") as mock_driver:
         mock_session = MagicMock()
         mock_session.__enter__.return_value = mock_session
@@ -33,7 +33,7 @@ def test_get_entities_for_explore_with_query():
 
 
 def test_get_entities_for_explore_without_query():
-    Neo4jManager._multidb_supported = None
+    Neo4jManager._multidb_supported = True
     with patch("backend.db.neo4j.GraphDatabase.driver") as mock_driver:
         mock_session = MagicMock()
         mock_session.__enter__.return_value = mock_session
@@ -52,7 +52,7 @@ def test_get_entities_for_explore_without_query():
 
 
 def test_get_relationships_for_explore_with_query():
-    Neo4jManager._multidb_supported = None
+    Neo4jManager._multidb_supported = True
     with patch("backend.db.neo4j.GraphDatabase.driver") as mock_driver:
         mock_session = MagicMock()
         mock_session.__enter__.return_value = mock_session
@@ -73,7 +73,7 @@ def test_get_relationships_for_explore_with_query():
 
 
 def test_get_relationships_for_explore_without_query():
-    Neo4jManager._multidb_supported = None
+    Neo4jManager._multidb_supported = True
     with patch("backend.db.neo4j.GraphDatabase.driver") as mock_driver:
         mock_session = MagicMock()
         mock_session.__enter__.return_value = mock_session

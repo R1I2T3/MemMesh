@@ -152,6 +152,39 @@ class Neo4jManager:
             result = session.run(cypher_query, keywords=[k.lower() for k in keywords])
             return [[record["source"], record["type"], record["target"]] for record in result]
 
+    def get_entities_for_explore(self, team_id: str, query: str, limit: int) -> list[dict]:
+        with self._get_session(team_id) as session:
+            if query:
+                result = session.run(
+                    "MATCH (e:Entity) WHERE toLower(e.name) CONTAINS toLower($q) "
+                    "RETURN e.id AS id, e.name AS name, e.type AS type, e.importance_score AS score "
+                    "LIMIT $limit", q=query, limit=limit
+                )
+            else:
+                result = session.run(
+                    "MATCH (e:Entity) RETURN e.id AS id, e.name AS name, e.type AS type, "
+                    "e.importance_score AS score ORDER BY e.importance_score DESC LIMIT $limit",
+                    limit=limit
+                )
+            return [dict(r) for r in result]
+
+    def get_relationships_for_explore(self, team_id: str, query: str, limit: int) -> list[dict]:
+        with self._get_session(team_id) as session:
+            if query:
+                result = session.run(
+                    "MATCH (a:Entity)-[r:RELATES_TO]->(b:Entity) "
+                    "WHERE toLower(a.name) CONTAINS toLower($q) OR toLower(b.name) CONTAINS toLower($q) "
+                    "RETURN a.id AS source, r.type AS type, b.id AS target LIMIT $limit",
+                    q=query, limit=limit
+                )
+            else:
+                result = session.run(
+                    "MATCH (a:Entity)-[r:RELATES_TO]->(b:Entity) "
+                    "RETURN a.id AS source, r.type AS type, b.id AS target "
+                    "ORDER BY r.weight DESC LIMIT $limit", limit=limit
+                )
+            return [dict(r) for r in result]
+
     def clear_graph(self, team_id: str):
         query = "MATCH (e:Entity) DETACH DELETE e"
         with self._get_session(team_id) as session:

@@ -30,6 +30,7 @@ import {
   UserIcon,
   LayoutDashboardIcon,
   UsersIcon,
+  GitBranchIcon,
 } from 'lucide-react';
 
 export const Route = createRoute({
@@ -118,6 +119,21 @@ function DashboardLayout() {
                         >
                           <FileTextIcon />
                           <span>Docs Console</span>
+                        </Link>
+                      }
+                    />
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      render={
+                        <Link
+                          id="link-graph"
+                          to="/dashboard/graph"
+                          activeProps={{ className: 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' }}
+                          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        >
+                          <GitBranchIcon />
+                          <span>Knowledge Graph</span>
                         </Link>
                       }
                     />

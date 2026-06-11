@@ -1,64 +1,61 @@
-import * as React from "react";
-import { Button } from "@/components/ui/button";
-import { AlertOctagon, RefreshCw } from "lucide-react";
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { AlertOctagonIcon, RefreshCwIcon } from 'lucide-react';
 
-interface Props {
-  children?: React.ReactNode;
+interface ErrorBoundaryProps {
+  children: ReactNode;
 }
 
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
 }
 
-export class ErrorBoundary extends React.Component<Props, State> {
-  public state: State = {
-    hasError: false,
-    error: null,
-  };
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
-  public static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
-  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("Uncaught error in ErrorBoundary:", error, errorInfo);
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
 
-  private handleReload = () => {
+  handleReload = () => {
     window.location.reload();
   };
 
-  public render() {
+  render() {
     if (this.state.hasError) {
       return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-16 text-foreground">
-          <div className="mx-auto flex w-full max-w-md flex-col items-center text-center">
-            <div className="rounded-full bg-destructive/10 p-4 text-destructive">
-              <AlertOctagon className="h-12 w-12" />
+        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6">
+          <div className="flex flex-col items-center gap-5 max-w-sm text-center">
+            <div className="bg-destructive/10 p-4 rounded-2xl ring-1 ring-destructive/20">
+              <AlertOctagonIcon className="size-10 text-destructive" />
             </div>
-            <h1 className="mt-6 text-3xl font-bold tracking-tight">Something went wrong</h1>
-            <p className="mt-4 text-muted-foreground text-center">
-              An unexpected error occurred in the application. We've logged the issue and are looking into it.
-            </p>
+            <div className="flex flex-col gap-1">
+              <h1 className="text-lg font-semibold tracking-tight text-foreground">Something went wrong</h1>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                An unexpected error occurred. Please reload the page to continue.
+              </p>
+            </div>
             {this.state.error && (
-              <div className="mt-6 w-full overflow-hidden rounded-lg border border-border bg-muted/50 p-4 text-left font-mono text-xs text-muted-foreground max-h-48 overflow-y-auto">
-                <p className="font-semibold text-destructive">{this.state.error.toString()}</p>
-                {this.state.error.stack && (
-                  <pre className="mt-2 whitespace-pre-wrap">{this.state.error.stack}</pre>
-                )}
+              <div className="w-full rounded-xl border border-border/60 bg-muted/30 p-4 text-left">
+                <p className="font-mono text-[10px] text-muted-foreground break-all leading-relaxed">
+                  {this.state.error.message}
+                </p>
               </div>
             )}
-            <div className="mt-8">
-              <Button
-                onClick={this.handleReload}
-                className="flex items-center gap-2"
-                size="lg"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Reload Page
-              </Button>
-            </div>
+            <button
+              onClick={this.handleReload}
+              className="inline-flex items-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-primary/90 active:scale-[0.98]"
+            >
+              <RefreshCwIcon className="size-4" />
+              Reload Page
+            </button>
           </div>
         </div>
       );

@@ -1,29 +1,10 @@
 import re
 import logging
-from functools import cache
 
 logger = logging.getLogger(__name__)
 
 class SafetyValidationError(ValueError):
     pass
-
-@cache
-def _get_analyzer_engine():
-    from presidio_analyzer import AnalyzerEngine
-    return AnalyzerEngine()
-
-@cache
-def _get_anonymizer_engine():
-    from presidio_anonymizer import AnonymizerEngine
-    return AnonymizerEngine()
-
-_presidio_available = False
-try:
-    _get_analyzer_engine()
-    _get_anonymizer_engine()
-    _presidio_available = True
-except Exception:
-    logger.warning("Presidio not available. PII detection will use regex fallback.")
 
 TOXIC_PATTERNS = [
     r"\b(kill|die|murder|attack|bomb|terrorist)\b",
@@ -42,15 +23,6 @@ def _has_toxic_content(text: str) -> bool:
     return False
 
 def _scrub_pii(text: str) -> str:
-    if _presidio_available:
-        try:
-            analyzer = _get_analyzer_engine()
-            anonymizer = _get_anonymizer_engine()
-            results = analyzer.analyze(text=text, language="en")
-            if results:
-                return anonymizer.anonymize(text=text, analyzer_results=results).text
-        except Exception:
-            logger.exception("Presidio failed, falling back to regex")
     text = EMAIL_REGEX.sub("[EMAIL]", text)
     text = PHONE_REGEX.sub("[PHONE]", text)
     text = SSN_REGEX.sub("[SSN]", text)

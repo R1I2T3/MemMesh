@@ -186,7 +186,7 @@ def test_member_crud_flow():
     # Add member
     add_res = client.post(
         "/api/admin/members",
-        json={"team_id": team_id, "user_id": user_id, "role": "team_lead"},
+        json={"team_id": team_id, "user_id": user_id, "role": "admin"},
         headers=get_superadmin_headers()
     )
     assert add_res.status_code == 200
@@ -194,12 +194,12 @@ def test_member_crud_flow():
     assert member_data["status"] == "added"
     assert member_data["team_id"] == team_id
     assert member_data["user_id"] == user_id
-    assert member_data["role"] == "team_lead"
+    assert member_data["role"] == "admin"
 
     # Add duplicate
     add_dup = client.post(
         "/api/admin/members",
-        json={"team_id": team_id, "user_id": user_id, "role": "team_lead"},
+        json={"team_id": team_id, "user_id": user_id, "role": "admin"},
         headers=get_superadmin_headers()
     )
     assert add_dup.status_code == 409
@@ -210,7 +210,7 @@ def test_member_crud_flow():
     data = list_res.json()
     assert len(data["members"]) == 1
     assert data["members"][0]["user_id"] == user_id
-    assert data["members"][0]["role"] == "team_lead"
+    assert data["members"][0]["role"] == "admin"
 
     # Remove member
     rem_res = client.delete(f"/api/admin/members?team_id={team_id}&user_id={user_id}", headers=get_superadmin_headers())

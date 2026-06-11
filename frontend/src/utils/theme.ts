@@ -1,8 +1,10 @@
-export function getNextTheme(current: string): string {
+export type Theme = 'light' | 'dark';
+
+export function getNextTheme(current: Theme): Theme {
   return current === 'light' ? 'dark' : 'light';
 }
 
-export function applyTheme(theme: string): void {
+export function applyTheme(theme: Theme): void {
   if (theme === 'dark') {
     document.documentElement.classList.add('dark');
   } else {
@@ -11,6 +13,6 @@ export function applyTheme(theme: string): void {
   localStorage.setItem('theme', theme);
 }
 
-export function getSavedTheme(): string {
-  return localStorage.getItem('theme') || 'light';
+export function getSavedTheme(): Theme {
+  return (localStorage.getItem('theme') as Theme) || 'light';
 }

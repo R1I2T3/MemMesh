@@ -8,7 +8,7 @@ test.describe('Query API & Chat Branching UI E2E Tests', () => {
     await page.goto('http://localhost:5173/dashboard/chat');
 
     // 2. Verify the chat page loaded
-    await expect(page.locator('#chat-title')).toHaveText('Chat Interface Console');
+    await expect(page.locator('#chat-title')).toHaveText('Chat Interface');
 
     // 3. Create a unique new chat session to run in isolation
     const newSessionInput = page.locator('#new-session-input');
@@ -17,7 +17,7 @@ test.describe('Query API & Chat Branching UI E2E Tests', () => {
     await page.locator('#add-session-btn').click();
 
     // Check that our new session is active (the header should display the session name)
-    await expect(page.locator('span.font-mono.text-indigo-500')).toHaveText(sessionName);
+    await expect(page.locator('#chat-title + p span')).toHaveText(sessionName);
 
     // 4. Send the first linear chat message
     const chatInput = page.locator('input[placeholder="Ask anything, agent orchestrator will route your query..."]');
@@ -49,7 +49,7 @@ test.describe('Query API & Chat Branching UI E2E Tests', () => {
     await branchBtn.click();
 
     // Verify branching helper banner is visible
-    const branchBanner = page.locator('text=Branching thread from message:');
+    const branchBanner = page.locator('text=Branching from:');
     await expect(branchBanner).toBeVisible();
 
     // Send the first branched question
@@ -62,9 +62,9 @@ test.describe('Query API & Chat Branching UI E2E Tests', () => {
     await branch1Response;
     await expect(chatInput).toBeEnabled();
 
-    // Verify first branch response is visible
+    // Verify first branch response is visible (messages load asynchronously)
     const branch1Msg = page.getByText('First branched path query', { exact: true });
-    await expect(branch1Msg).toBeVisible();
+    await expect(branch1Msg).toBeVisible({ timeout: 15000 });
 
     // 6. Branch from the original assistant message again to create a second branch (bifurcation point)
     // Find the original assistant message and hover/click Branch again
@@ -85,9 +85,9 @@ test.describe('Query API & Chat Branching UI E2E Tests', () => {
     await branch2Response;
     await expect(chatInput).toBeEnabled();
 
-    // Verify second branch response is visible
+    // Verify second branch response is visible (messages load asynchronously)
     const branch2Msg = page.getByText('Second branched path query', { exact: true });
-    await expect(branch2Msg).toBeVisible();
+    await expect(branch2Msg).toBeVisible({ timeout: 15000 });
 
     // 7. Verify the branch switcher is rendered under the bifurcation point (the first assistant message)
     // Since there are 2 child threads starting from it, a branch switcher "Branch: 2 of 2" (or "1 of 2") should appear

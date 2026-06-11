@@ -1,12 +1,5 @@
-export interface Message {
-  message_id: string;
-  session_id: string;
-  parent_message_id: string | null;
-  role: 'user' | 'assistant' | string;
-  content: string;
-  created_at: string | null;
-  citations?: any[];
-}
+import type { Message } from '@/types/api';
+export type { Message };
 
 /**
  * Finds all leaf messages in a list of messages.

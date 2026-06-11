@@ -30,7 +30,7 @@ class UserCreate(BaseModel):
 class MemberAdd(BaseModel):
     team_id: str
     user_id: str
-    role: Literal["user", "team_lead"] = "user"
+    role: Literal["member", "admin", "owner"] = "member"
 
 # --- Teams — any authenticated user ---
 

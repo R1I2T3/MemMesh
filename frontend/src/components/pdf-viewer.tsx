@@ -3,7 +3,6 @@ import { API_BASE } from "../lib/api";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
-// Keep pdfjs-dist version in sync with the worker CDN URL below
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@4.8.69/build/pdf.worker.min.mjs`;
 
 interface PdfViewerProps {
@@ -29,12 +28,18 @@ export function PdfViewer({ docId, pageNumber = 1, bbox }: PdfViewerProps) {
     : null;
 
   return (
-    <div className="relative overflow-auto border rounded-lg bg-white">
+    <div className="relative overflow-auto rounded-xl bg-background border border-border/60">
       <Document
         file={pdfUrl}
-        loading={<div className="p-4 text-center">Loading PDF...</div>}
+        loading={
+          <div className="p-4 text-center text-xs text-muted-foreground animate-pulse">
+            Loading PDF...
+          </div>
+        }
         error={
-          <div className="p-4 text-center text-red-500">Failed to load PDF</div>
+          <div className="p-4 text-center text-xs text-destructive">
+            Failed to load PDF
+          </div>
         }
       >
         <Page
@@ -46,7 +51,7 @@ export function PdfViewer({ docId, pageNumber = 1, bbox }: PdfViewerProps) {
       </Document>
       {highlightStyle && (
         <div
-          className="absolute pointer-events-none border-2 border-indigo-500 bg-indigo-500/20"
+          className="absolute pointer-events-none border-2 border-primary bg-primary/20 rounded-sm"
           style={highlightStyle}
         />
       )}

@@ -2,6 +2,10 @@ from backend.middleware.logging_config import setup_logging
 # Initialize logging as early as possible
 setup_logging()
 
+import warnings
+# Suppress deprecation warning from google-genai's AiohttpClientSession inheriting from ClientSession
+warnings.filterwarnings("ignore", message="Inheritance class AiohttpClientSession")
+
 import sys
 import logging
 import uuid
@@ -23,7 +27,6 @@ from backend.api.routes.eval import router as eval_router
 from backend.api.routes.decay import router as decay_router
 from backend.api.routes.analytics import router as analytics_router
 from backend.api.routes.documents import router as documents_router
-from backend.api.routes.graph import router as graph_router
 from backend.api.routes.export import router as export_router
 from backend.db.weaviate import WeaviateManager
 
@@ -137,7 +140,6 @@ app.include_router(eval_router)
 app.include_router(decay_router)
 app.include_router(analytics_router)
 app.include_router(documents_router)
-app.include_router(graph_router)
 app.include_router(export_router)
 
 @app.get("/api/health")

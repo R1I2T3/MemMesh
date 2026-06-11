@@ -4,7 +4,7 @@ test.describe('Safety Validation & SSE Streaming E2E Tests', () => {
   test('User query with toxic content is blocked', async ({ page }) => {
     const sessionName = `e2e-safety-toxic-${Date.now()}`;
     await page.goto('http://localhost:5173/dashboard/chat');
-    await expect(page.locator('#chat-title')).toHaveText('Chat Interface Console');
+    await expect(page.locator('#chat-title')).toHaveText('Chat Interface');
 
     // Create session
     await page.locator('#new-session-input').fill(sessionName);
@@ -12,9 +12,9 @@ test.describe('Safety Validation & SSE Streaming E2E Tests', () => {
 
     // Enter toxic query
     const chatInput = page.locator('input[placeholder="Ask anything, agent orchestrator will route your query..."]');
-    await chatInput.fill('This is a toxic and offensive query.');
+    await chatInput.fill('This is a hateful and stupid query.');
 
-    // Wait for the response which should fail with 400
+    // Wait for the stream response which should fail with 400
     const queryResponse = page.waitForResponse(
       resp => resp.url().includes('/api/query/stream') && resp.status() === 400,
       { timeout: 15000 }
@@ -23,7 +23,7 @@ test.describe('Safety Validation & SSE Streaming E2E Tests', () => {
     await queryResponse;
 
     // Verify error is displayed on UI
-    await expect(page.locator('text=Query contains toxic language and is blocked.')).toBeVisible();
+    await expect(page.locator('text=Query contains potentially harmful content')).toBeVisible();
   });
 
   test('User query with PII has email scrubbed before persisting', async ({ page }) => {
@@ -59,7 +59,7 @@ test.describe('Safety Validation & SSE Streaming E2E Tests', () => {
     await page.locator('button[type="submit"]').click();
 
     // Verify that the error is displayed on UI immediately without sending request
-    await expect(page.locator('text=Input query failed client-side security checks')).toBeVisible();
+    await expect(page.locator('text=Input failed client-side security checks')).toBeVisible();
   });
 
   test('LLM output with toxic content is blocked', async ({ page }) => {
@@ -73,16 +73,10 @@ test.describe('Safety Validation & SSE Streaming E2E Tests', () => {
     const chatInput = page.locator('input[placeholder="Ask anything, agent orchestrator will route your query..."]');
     await chatInput.fill('trigger unsafe response');
 
-    // Wait for the response which should fail with 400
-    const queryResponse = page.waitForResponse(
-      resp => resp.url().includes('/api/query/stream') && resp.status() === 400,
-      { timeout: 15000 }
-    );
     await page.locator('button[type="submit"]').click();
-    await queryResponse;
 
-    // Verify error is displayed on UI
-    await expect(page.locator('text=Output contains toxic language and is blocked.')).toBeVisible();
+    // Wait for the error message to appear via SSE event
+    await expect(page.locator('text=Output contains toxic language and is blocked.')).toBeVisible({ timeout: 15000 });
   });
 
   test('LLM output with PII has email scrubbed before persisting and streaming', async ({ page }) => {

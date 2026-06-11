@@ -9,5 +9,5 @@ test('should switch themes and navigate to chat', async ({ page }) => {
   await expect(html).toHaveClass(/dark/);
 
   await page.locator('#link-chat').click();
-  await expect(page.locator('#chat-title')).toContainText('Chat Interface Console');
+  await expect(page.locator('#chat-title')).toContainText('Chat Interface');
 });

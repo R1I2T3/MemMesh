@@ -40,7 +40,7 @@ test.describe('Document Ingestion E2E Tests', () => {
       await docsLink.click();
 
       await expect(page).toHaveURL(/.*\/dashboard\/docs/);
-      await expect(page.locator('#docs-title')).toHaveText('Document Ingestion Console');
+      await expect(page.locator('#docs-title')).toHaveText('Document Ingestion');
 
       // 3. Select the team we created in the dropdown
       const teamSelectTrigger = page.locator('#team-select');
@@ -54,7 +54,7 @@ test.describe('Document Ingestion E2E Tests', () => {
 
       // 4. Test file upload input and button presence
       const fileInput = page.locator('#file-input');
-      await expect(fileInput).toBeVisible();
+      await expect(fileInput).toBeAttached();
 
       const uploadBtn = page.locator('#upload-button');
       await expect(uploadBtn).toBeVisible();

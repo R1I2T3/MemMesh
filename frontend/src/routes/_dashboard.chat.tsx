@@ -1,169 +1,58 @@
 import { createRoute } from '@tanstack/react-router';
 import { Route as dashboardRoute } from './_dashboard';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { apiFetch, API_BASE, authHeaders } from '../lib/api';
-import { fetchEventSource } from '@microsoft/fetch-event-source';
-import { clientSideInputCheck } from '../utils/safety';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { apiFetch } from '../lib/api';
+import { chatSearchSchema } from './search.schemas';
+import { useChatStream } from '@/hooks/useChatStream';
+import { ChatSidebar } from '@/components/chat/ChatSidebar';
+import { ChatHeader } from '@/components/chat/ChatHeader';
+import { ChatMessage } from '@/components/chat/ChatMessage';
+import { ChatInput } from '@/components/chat/ChatInput';
+import { BranchSwitcher } from '@/components/chat/BranchSwitcher';
+import { StreamingSkeleton } from '@/components/chat/StreamingSkeleton';
+import { CitationDrawer, type Citation } from '@/components/CitationDrawer';
+import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
-import {
-  MessageSquareIcon,
-  GitBranchIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  SendIcon,
-  PlusIcon,
-  XIcon,
-  Loader2Icon,
-  AlertTriangleIcon,
-  UserIcon,
-  BotIcon,
-  ThumbsUpIcon,
-  ThumbsDownIcon,
-  FileDownIcon
-} from 'lucide-react';
+import { AlertTriangleIcon, XIcon, MessageSquareIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   getLeafMessages,
   reconstructActivePath,
   findLatestLeaf,
-  Message
 } from '../utils/query';
-import { CitationDrawer, Citation } from '../components/CitationDrawer';
+import type { Message, Team } from '@/types/api';
 
 export const Route = createRoute({
   getParentRoute: () => dashboardRoute,
   path: '/chat',
+  validateSearch: chatSearchSchema,
   component: ChatInterfaceConsole,
 });
 
-interface Team {
-  team_id: string;
-  name: string;
-}
-
 function ChatInterfaceConsole() {
-  // Team Selection State
   const [teams, setTeams] = useState<Team[]>([]);
   const [activeTeamId, setActiveTeamId] = useState<string>(() => {
     return localStorage.getItem('active_team_id') || '';
   });
 
-  // Session Selection State
   const [sessions, setSessions] = useState<string[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>('default-session');
-  const [newSessionInput, setNewSessionInput] = useState<string>('');
-
-  // Messages State
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
   const [parentMsgId, setParentMsgId] = useState<string | null>(null);
 
-  // Input Query State
-  const [queryInput, setQueryInput] = useState<string>('');
-
-  // UI / Loading / Error States
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const [sendingQuery, setSendingQuery] = useState(false);
   const [error, setError] = useState('');
 
-  // Citation Drawer State
+  const [ratings, setRatings] = useState<Record<string, number>>({});
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  const handleCitationClick = (citation: Citation) => {
-    setSelectedCitation(citation);
-    setIsDrawerOpen(true);
-  };
-
-  const renderMessageContent = (msg: Message) => {
-    const hasCitations = msg.role === 'assistant' && msg.citations && msg.citations.length > 0;
-
-    const processed = hasCitations
-      ? msg.content.replace(
-          /\[(?:Web\s+)?(\d+)\]/g,
-          (match, num) => `<span data-idx="${parseInt(num) - 1}">${match}</span>`
-        )
-      : msg.content;
-
-    return (
-      <div className="prose prose-sm dark:prose-invert max-w-none break-words">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeRaw]}
-          components={{
-            span: ({ children, ...props }) => {
-              const dataIdx = (props as any)['data-idx'];
-              if (dataIdx !== undefined) {
-                const idx = parseInt(dataIdx, 10);
-                const citations = msg.citations as any[] | undefined;
-                const citation = citations?.[idx];
-                if (citation) {
-                  return (
-                    <button
-                      onClick={() => handleCitationClick(citation)}
-                      className="inline-flex items-center justify-center px-1.5 py-0.5 mx-0.5 text-xs font-semibold rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-900/60 dark:hover:bg-indigo-900/50 transition-colors shadow-sm cursor-pointer align-baseline font-mono not-prose"
-                      title={`View source: ${citation.source || citation.url || 'Document'}`}
-                    >
-                      {children}
-                    </button>
-                  );
-                }
-                return <span className="font-mono text-xs">{children}</span>;
-              }
-              return <span>{children}</span>;
-            },
-          }}
-        >
-          {processed}
-        </ReactMarkdown>
-      </div>
-    );
-  };
-
-  // Ratings State for Feedback
-  const [ratings, setRatings] = useState<Record<string, number>>({});
-
-  // Handle Feedback Submission
-  const handleFeedback = async (msgId: string, rating: number) => {
-    const msg = messages.find((m) => m.message_id === msgId);
-    if (!msg) return;
-
-    const parentMsg = messages.find((m) => m.message_id === msg.parent_message_id);
-    const query = parentMsg ? parentMsg.content : 'Unknown Query';
-    const response = msg.content;
-    const traceId = `trace-${Date.now()}`;
-
-    try {
-      const res = await apiFetch('/api/feedback', {
-        method: 'POST',
-        body: JSON.stringify({
-          query,
-          response,
-          rating,
-          trace_id: traceId,
-        }),
-      });
-      if (res.ok) {
-        setRatings((prev) => ({ ...prev, [msgId]: rating }));
-      } else {
-        setError('Failed to submit feedback');
-      }
-    } catch {
-      setError('Failed to submit feedback due to network error');
-    }
-  };
-
+  const { sendQuery, sendingQuery, streamError } = useChatStream();
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Fetch Teams
   const fetchTeams = useCallback(async () => {
     setLoadingTeams(true);
     try {
@@ -177,8 +66,6 @@ function ChatInterfaceConsole() {
           setActiveTeamId(firstId);
           localStorage.setItem('active_team_id', firstId);
         }
-      } else {
-        setError('Failed to load teams');
       }
     } catch {
       setError('Failed to load teams');
@@ -187,7 +74,6 @@ function ChatInterfaceConsole() {
     }
   }, [activeTeamId]);
 
-  // 2. Fetch Sessions
   const fetchSessions = useCallback(async () => {
     setLoadingSessions(true);
     try {
@@ -203,7 +89,6 @@ function ChatInterfaceConsole() {
     }
   }, []);
 
-  // 3. Fetch Messages for Session
   const fetchMessages = useCallback(async (sessionId: string) => {
     if (!sessionId) return;
     setLoadingMessages(true);
@@ -212,7 +97,14 @@ function ChatInterfaceConsole() {
       const res = await apiFetch(`/api/chat/messages?session_id=${sessionId}`);
       if (res.ok) {
         const data = await res.json();
-        setMessages(data.messages || []);
+        const msgs = data.messages || [];
+        setMessages(msgs);
+        const leaves = getLeafMessages(msgs);
+        if (leaves.length > 0) {
+          setActiveMessageId(leaves[leaves.length - 1].message_id);
+        } else {
+          setActiveMessageId(null);
+        }
       } else {
         setMessages([]);
         setError('Failed to load messages');
@@ -225,30 +117,25 @@ function ChatInterfaceConsole() {
     }
   }, []);
 
-  // Initial loads
   useEffect(() => {
     fetchTeams();
     fetchSessions();
   }, [fetchTeams, fetchSessions]);
 
-  // Reload messages when session changes
   useEffect(() => {
     fetchMessages(activeSessionId);
   }, [activeSessionId, fetchMessages]);
 
-  // Auto-scroll to bottom of chat when path changes or loading status changes
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, activeMessageId, sendingQuery]);
 
-  // Re-establish activeMessageId when messages list changes
   useEffect(() => {
     if (messages.length > 0) {
       const exists = messages.some((m) => m.message_id === activeMessageId);
       if (!activeMessageId || !exists) {
         const leaves = getLeafMessages(messages);
         if (leaves.length > 0) {
-          // Default to the latest leaf in chronological order (last item)
           const latestLeaf = leaves[leaves.length - 1];
           setActiveMessageId(latestLeaf.message_id);
         } else {
@@ -260,534 +147,271 @@ function ChatInterfaceConsole() {
     }
   }, [messages, activeMessageId]);
 
-  // Active path reconstruction
   const activePath = reconstructActivePath(messages, activeMessageId);
-
-  // Filter root level messages to determine if there are root-level branches
   const roots = messages.filter((m) => m.parent_message_id === null);
 
-  // Handle Send Query
-  const handleSendQuery = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!queryInput.trim() || sendingQuery) return;
-
-    setError('');
-    const currentQuery = queryInput;
-    const currentParentId = parentMsgId;
-
-    // Client-side SQL injection validation
-    if (!clientSideInputCheck(currentQuery)) {
-      setError('Input query failed client-side security checks (SQL injection pattern detected).');
-      return;
-    }
-
-    setSendingQuery(true);
-    setQueryInput('');
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...authHeaders(),
-    };
-    const body = JSON.stringify({
-      query: currentQuery,
-      session_id: activeSessionId,
-      ...(currentParentId ? { parent_msg_id: currentParentId } : {}),
-    });
-
-    const abortController = new AbortController();
-
-    let assistantId = '';
-    let userId = '';
-    let currentResponseText = '';
-    let currentCitations: any[] = [];
-
-    try {
-      await fetchEventSource(`${API_BASE}/api/query/stream`, {
-        method: 'POST',
-        headers,
-        body,
-        signal: abortController.signal,
-        async onopen(response) {
-          if (response.ok) {
-            return;
-          }
-          let errMsg = `Server returned status ${response.status}`;
-          try {
-            const errData = await response.json();
-            errMsg = errData.detail || errMsg;
-          } catch {}
-          throw new Error(errMsg);
-        },
-        onmessage(ev) {
-          try {
-            const data = JSON.parse(ev.data);
-            switch (data.type) {
-              case 'text_chunk':
-                if (!assistantId) {
-                  assistantId = 'pending-' + Date.now();
-                  userId = 'pending-user-' + Date.now();
-                  const pendingUserMsg: Message = {
-                    message_id: userId,
-                    session_id: activeSessionId,
-                    parent_message_id: currentParentId,
-                    role: 'user',
-                    content: currentQuery,
-                    created_at: new Date().toISOString()
-                  };
-                  const pendingAssistantMsg: Message = {
-                    message_id: assistantId,
-                    session_id: activeSessionId,
-                    parent_message_id: userId,
-                    role: 'assistant',
-                    content: '',
-                    created_at: new Date().toISOString()
-                  };
-                  setMessages((prev) => [...prev, pendingUserMsg, pendingAssistantMsg]);
-                  setActiveMessageId(assistantId);
-                }
-                currentResponseText += data.content;
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.message_id === assistantId
-                      ? { ...msg, content: currentResponseText }
-                      : msg
-                  )
-                );
-                break;
-              case 'citation':
-                currentCitations.push(data);
-                break;
-              case 'session':
-                if (data.user_message_id && data.message_id) {
-                  userId = data.user_message_id;
-                  assistantId = data.message_id;
-                  setMessages((prev) =>
-                    prev.map((msg) => {
-                      if (msg.message_id === userId) return { ...msg, message_id: userId };
-                      if (msg.message_id.startsWith('pending-')) return { ...msg, message_id: assistantId };
-                      return msg;
-                    })
-                  );
-                  setActiveMessageId(assistantId);
-                }
-                break;
-              case 'done':
-                if (assistantId && currentCitations.length > 0) {
-                  setMessages((prev) =>
-                    prev.map((msg) =>
-                      msg.message_id === assistantId
-                        ? { ...msg, citations: currentCitations }
-                        : msg
-                    )
-                  );
-                }
-                setSendingQuery(false);
-                fetchMessages(activeSessionId);
-                fetchSessions();
-                setParentMsgId(null);
-                abortController.abort();
-                break;
-              case 'error':
-                setError(data.detail);
-                setSendingQuery(false);
-                break;
-              default:
-                break;
+  const handleSendQuery = async (query: string, currentParentId: string | null) => {
+    await sendQuery({
+      query,
+      sessionId: activeSessionId,
+      parentMsgId: currentParentId,
+      onUpdate: (update) => {
+        switch (update.type) {
+          case 'pending':
+            setMessages((prev) => [...prev, update.userMsg, update.assistantMsg]);
+            setActiveMessageId(update.assistantMsg.message_id);
+            break;
+          case 'chunk':
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.message_id.startsWith('pending-')
+                  ? { ...msg, content: msg.content + update.text }
+                  : msg,
+              ),
+            );
+            break;
+          case 'resolved':
+            setMessages((prev) =>
+              prev.map((msg) => {
+                if (msg.message_id === update.userId) return { ...msg, message_id: update.userId };
+                if (msg.message_id.startsWith('pending-')) return { ...msg, message_id: update.assistantId };
+                return msg;
+              }),
+            );
+            break;
+          case 'done':
+            if (update.citations.length > 0) {
+              setMessages((prev) =>
+                prev.map((msg) => {
+                  const msgId = msg.message_id.startsWith('pending-') ? 'assistant' : msg.message_id;
+                  return msg.role === 'assistant' && (msg.message_id === activeMessageId || msgId === 'assistant')
+                    ? { ...msg, citations: update.citations }
+                    : msg;
+                }),
+              );
             }
-          } catch (err) {
-            console.error('Error parsing SSE event:', err);
-          }
-        },
-        onerror(err) {
-          if (err.message && /^Server returned status 4/.test(err.message)) {
-            setError(err.message);
-            setSendingQuery(false);
-            abortController.abort();
-            return;
-          }
-          setError(err.message || 'Stream connection error');
-          setSendingQuery(false);
-          abortController.abort();
-          throw err;
+            fetchMessages(activeSessionId);
+            fetchSessions();
+            setParentMsgId(null);
+            break;
+          case 'error':
+            setError(update.detail);
+            break;
         }
-      });
-    } catch (err: any) {
-      setError(err.message || 'Network error sending query');
-      setQueryInput(currentQuery);
-      setSendingQuery(false);
+      },
+    });
+  };
+
+  const handleExport = async (format: 'md' | 'json') => {
+    try {
+      const res = await apiFetch(`/api/chat/sessions/${activeSessionId}/export?format=${format}`);
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || 'Export failed');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${activeSessionId}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Export failed');
     }
   };
 
-  // Switch Active Team
+  const handleFeedback = async (msgId: string, rating: number) => {
+    const msg = messages.find((m) => m.message_id === msgId);
+    if (!msg) return;
+
+    const parentMsg = messages.find((m) => m.message_id === msg.parent_message_id);
+    const query = parentMsg ? parentMsg.content : 'Unknown Query';
+    const response = msg.content;
+    const traceId = `trace-${Date.now()}`;
+
+    try {
+      const res = await apiFetch('/api/feedback', {
+        method: 'POST',
+        body: JSON.stringify({ query, response, rating, trace_id: traceId }),
+      });
+      if (res.ok) {
+        setRatings((prev) => ({ ...prev, [msgId]: rating }));
+      } else {
+        setError('Failed to submit feedback');
+      }
+    } catch {
+      setError('Failed to submit feedback due to network error');
+    }
+  };
+
   const handleTeamChange = (teamId: string) => {
     setActiveTeamId(teamId);
     localStorage.setItem('active_team_id', teamId);
   };
 
-  // Add / Switch Session
-  const handleAddSession = () => {
-    if (!newSessionInput.trim()) return;
-    const sId = newSessionInput.trim();
-    if (!sessions.includes(sId)) {
-      setSessions((prev) => [...prev, sId]);
+  const handleAddSession = (sessionId: string) => {
+    if (!sessions.includes(sessionId)) {
+      setSessions((prev) => [...prev, sessionId]);
     }
-    setActiveSessionId(sId);
-    setNewSessionInput('');
+    setActiveSessionId(sessionId);
     setMessages([]);
     setActiveMessageId(null);
     setParentMsgId(null);
   };
 
+  const handleSessionChange = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    setParentMsgId(null);
+    setActiveMessageId(null);
+  };
+
+  const combinedError = error || streamError;
+
   return (
-    <div className="flex flex-col md:flex-row gap-6 p-6 h-[calc(100vh-80px)] overflow-hidden">
-      {/* Sidebar Control Panel */}
-      <Card className="w-full md:w-80 flex-shrink-0 flex flex-col max-h-full">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <MessageSquareIcon className="size-5 text-indigo-500" />
-            Chat Workspace
-          </CardTitle>
-          <CardDescription>Configure team context and sessions</CardDescription>
-        </CardHeader>
-        <CardContent className="flex-grow flex flex-col gap-4 overflow-y-auto">
-          {/* Team Selection */}
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Active Team Context
-            </label>
-            {loadingTeams ? (
-              <Skeleton className="h-10 w-full" />
-            ) : (
-              <Select value={activeTeamId} onValueChange={(val) => handleTeamChange(val || '')}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select team" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teams.map((t) => (
-                    <SelectItem key={t.team_id} value={t.team_id}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
+    <div className="flex flex-col md:flex-row gap-5 h-[calc(100vh-80px)] overflow-hidden max-w-6xl mx-auto">
+      <ChatSidebar
+        teams={teams}
+        activeTeamId={activeTeamId}
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        loadingTeams={loadingTeams}
+        loadingSessions={loadingSessions}
+        onTeamChange={handleTeamChange}
+        onSessionChange={handleSessionChange}
+        onAddSession={handleAddSession}
+      />
 
-          {/* Session Selection */}
-          <div className="flex flex-col gap-2 flex-grow">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Chat Session
-            </label>
-            {loadingSessions ? (
-              <Skeleton className="h-10 w-full" />
-            ) : (
-              <Select value={activeSessionId} onValueChange={(val) => {
-                setActiveSessionId(val || 'default-session');
-                setParentMsgId(null);
-                setActiveMessageId(null);
-              }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select session" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default-session">default-session</SelectItem>
-                  {sessions
-                    .filter((s) => s !== 'default-session')
-                    .map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            )}
+      <Card className="flex-grow flex flex-col h-full relative overflow-hidden bg-card border-border/80 shadow-sm">
+        <ChatHeader
+          activeSessionId={activeSessionId}
+          threadPosition={
+            roots.length > 0
+              ? `${roots.findIndex((r) => activePath.some((ap) => ap.message_id === r.message_id)) + 1}/${roots.length}`
+              : ''
+          }
+          hasMultipleThreads={roots.length > 1}
+          onPrevThread={() => {
+            const activeRootIndex = roots.findIndex((r) =>
+              activePath.some((ap) => ap.message_id === r.message_id),
+            );
+            const prevIndex = (activeRootIndex - 1 + roots.length) % roots.length;
+            const newLeafId = findLatestLeaf(messages, roots[prevIndex].message_id);
+            setActiveMessageId(newLeafId);
+          }}
+          onNextThread={() => {
+            const activeRootIndex = roots.findIndex((r) =>
+              activePath.some((ap) => ap.message_id === r.message_id),
+            );
+            const nextIndex = (activeRootIndex + 1) % roots.length;
+            const newLeafId = findLatestLeaf(messages, roots[nextIndex].message_id);
+            setActiveMessageId(newLeafId);
+          }}
+          onExport={handleExport}
+        />
 
-            <div className="flex gap-2 mt-2">
-              <Input
-                id="new-session-input"
-                placeholder="New session ID..."
-                value={newSessionInput}
-                onChange={(e) => setNewSessionInput(e.target.value)}
-                className="flex-grow"
-              />
-              <Button id="add-session-btn" size="icon" onClick={handleAddSession} variant="secondary">
-                <PlusIcon className="size-4" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Main Chat Area */}
-      <Card className="flex-grow flex flex-col h-full relative overflow-hidden bg-background">
-        {/* Header */}
-        <div className="p-4 border-b flex flex-col md:flex-row md:items-center justify-between gap-4 bg-muted/20">
-          <div>
-            <h2 id="chat-title" className="text-lg font-bold tracking-tight">
-              Chat Interface Console
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Session: <span className="font-mono text-indigo-500">{activeSessionId}</span>
-            </p>
-          </div>
-          {/* Root-Level Branch Switcher */}
-          {roots.length > 1 && (
-            <div className="flex items-center gap-2 border bg-background px-3 py-1 rounded-md text-xs">
-              <span className="font-medium text-muted-foreground">Thread Roots:</span>
-              <span className="font-mono">
-                {roots.findIndex((r) => activePath.some((ap) => ap.message_id === r.message_id)) + 1} of {roots.length}
-              </span>
-              <div className="flex items-center gap-1">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="size-6"
-                  onClick={() => {
-                    const activeRootIndex = roots.findIndex((r) => activePath.some((ap) => ap.message_id === r.message_id));
-                    const prevIndex = (activeRootIndex - 1 + roots.length) % roots.length;
-                    const newLeafId = findLatestLeaf(messages, roots[prevIndex].message_id);
-                    setActiveMessageId(newLeafId);
-                  }}
-                >
-                  <ChevronLeftIcon className="size-4" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="size-6"
-                  onClick={() => {
-                    const activeRootIndex = roots.findIndex((r) => activePath.some((ap) => ap.message_id === r.message_id));
-                    const nextIndex = (activeRootIndex + 1) % roots.length;
-                    const newLeafId = findLatestLeaf(messages, roots[nextIndex].message_id);
-                    setActiveMessageId(newLeafId);
-                  }}
-                >
-                  <ChevronRightIcon className="size-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open(`/api/chat/sessions/${activeSessionId}/export?format=md`, '_blank')}
-            >
-              <FileDownIcon className="size-3.5 mr-1" />
-              Export MD
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open(`/api/chat/sessions/${activeSessionId}/export?format=json`, '_blank')}
-            >
-              <FileDownIcon className="size-3.5 mr-1" />
-              Export JSON
-            </Button>
-          </div>
-        </div>
-
-        {/* Error Alert */}
-        {error && (
-          <div className="bg-destructive/10 border-b border-destructive/20 p-3 text-destructive text-xs flex items-center gap-2">
-            <AlertTriangleIcon className="size-4 shrink-0" />
-            <span>{error}</span>
-            <Button size="icon" variant="ghost" className="size-4 ml-auto hover:bg-transparent" onClick={() => setError('')}>
+        {combinedError && (
+          <div className="bg-destructive/8 border-b border-destructive/15 px-4 py-2.5 text-destructive text-xs flex items-center gap-2">
+            <AlertTriangleIcon className="size-3.5 shrink-0" />
+            <span className="flex-1">{combinedError}</span>
+            <Button size="icon-xs" variant="ghost" className="text-destructive/60 hover:text-destructive" onClick={() => setError('')}>
               <XIcon className="size-3" />
             </Button>
           </div>
         )}
 
-        {/* Message Feed Area */}
-        <div className="flex-grow overflow-y-auto p-4 flex flex-col gap-4">
-          {loadingMessages ? (
-            <div className="flex flex-col gap-4">
-              <Skeleton className="h-16 w-3/4 rounded-lg self-start" />
-              <Skeleton className="h-16 w-3/4 rounded-lg self-end" />
-              <Skeleton className="h-20 w-3/4 rounded-lg self-start" />
-            </div>
-          ) : activePath.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center p-8">
-              <div className="bg-indigo-50 dark:bg-indigo-950/30 p-4 rounded-full mb-4">
-                <MessageSquareIcon className="size-8 text-indigo-500" />
-              </div>
-              <h3 className="font-semibold text-slate-800 dark:text-slate-200">No message history</h3>
-              <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                Send your first message to initialize the LangGraph agent chain in this session.
-              </p>
-            </div>
-          ) : (
-            activePath.map((msg) => {
-              const isUser = msg.role === 'user';
-              // Find children of this message in the FULL list
-              const children = messages.filter((m) => m.parent_message_id === msg.message_id);
-              // Find which child is in the current active path
-              const nextMsgInPath = activePath[activePath.indexOf(msg) + 1];
-              const activeChildId = nextMsgInPath ? nextMsgInPath.message_id : null;
-              const activeChildIndex = children.findIndex((c) => c.message_id === activeChildId);
-
-              return (
-                <div key={msg.message_id} className="flex flex-col gap-2 group">
-                  <div className={`flex gap-3 max-w-[85%] ${isUser ? 'self-end flex-row-reverse' : 'self-start'}`}>
-                    {/* Avatar */}
-                    <div className={`size-8 rounded-full flex items-center justify-center flex-shrink-0 border ${
-                      isUser ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-muted border-slate-200 dark:border-slate-800'
-                    }`}>
-                      {isUser ? <UserIcon className="size-4" /> : <BotIcon className="size-4" />}
-                    </div>
-
-                    {/* Speech bubble */}
-                    <div className="flex flex-col gap-1">
-                      <div className={`p-3.5 rounded-2xl relative shadow-sm border text-sm leading-relaxed transition-all duration-200 ${
-                        isUser
-                          ? 'bg-indigo-600 border-indigo-500 text-white rounded-tr-none'
-                          : 'bg-card border-slate-200 dark:border-slate-800 text-foreground rounded-tl-none'
-                      }`}>
-                        {renderMessageContent(msg)}
-
-                        {!isUser && (
-                          <div className="flex items-center gap-2 mt-2 pt-1 border-t border-slate-100 dark:border-slate-800/50">
-                            <button
-                              type="button"
-                              onClick={() => handleFeedback(msg.message_id, 1)}
-                              className={`p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center ${
-                                ratings[msg.message_id] === 1 ? 'text-green-600 dark:text-green-400' : 'text-slate-400 hover:text-slate-600'
-                              }`}
-                              title="Thumbs Up"
-                            >
-                              <ThumbsUpIcon className="size-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleFeedback(msg.message_id, -1)}
-                              className={`p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center ${
-                                ratings[msg.message_id] === -1 ? 'text-red-600 dark:text-red-400' : 'text-slate-400 hover:text-slate-600'
-                              }`}
-                              title="Thumbs Down"
-                            >
-                              <ThumbsDownIcon className="size-4" />
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Hover Action Button for Branching */}
-                        <div className={`absolute top-1/2 -translate-y-1/2 flex gap-1 transition-opacity opacity-0 group-hover:opacity-100 ${
-                          isUser ? 'right-full mr-2' : 'left-full ml-2'
-                        }`}>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="h-7 px-2.5 text-xs flex items-center gap-1 shadow-sm border border-slate-200 dark:border-slate-800 bg-background hover:bg-muted"
-                            onClick={() => setParentMsgId(msg.message_id)}
-                          >
-                            <GitBranchIcon className="size-3 text-indigo-500" />
-                            <span>Branch</span>
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
+        <div className="flex-grow overflow-y-auto px-4 md:px-8 py-5">
+          <div className="max-w-3xl mx-auto flex flex-col gap-5">
+            {loadingMessages ? (
+              <div className="flex flex-col gap-5">
+                <div className="flex gap-3 self-start max-w-[75%]">
+                  <Skeleton className="size-8 rounded-full shrink-0" />
+                  <div className="flex flex-col gap-2 flex-1">
+                    <Skeleton className="h-12 w-64 rounded-2xl rounded-tl-none" />
                   </div>
-
-                  {/* Sub-Branch Switcher */}
-                  {children.length > 1 && (
-                    <div className={`flex items-center gap-2 text-[11px] px-11 text-muted-foreground ${isUser ? 'justify-end' : 'justify-start'}`}>
-                      <div className="flex items-center gap-1 border rounded bg-background px-2 py-0.5 shadow-sm">
-                        <span className="font-semibold text-slate-700 dark:text-slate-300">Branch:</span>
-                        <span>
-                          {activeChildIndex !== -1 ? activeChildIndex + 1 : 1} of {children.length}
-                        </span>
-                        <div className="flex items-center gap-0.5 ml-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="size-4"
-                            onClick={() => {
-                              const currIdx = activeChildIndex !== -1 ? activeChildIndex : 0;
-                              const prevIdx = (currIdx - 1 + children.length) % children.length;
-                              const newChild = children[prevIdx];
-                              const newLeafId = findLatestLeaf(messages, newChild.message_id);
-                              setActiveMessageId(newLeafId);
-                            }}
-                          >
-                            <ChevronLeftIcon className="size-3" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="size-4"
-                            onClick={() => {
-                              const currIdx = activeChildIndex !== -1 ? activeChildIndex : 0;
-                              const nextIdx = (currIdx + 1) % children.length;
-                              const newChild = children[nextIdx];
-                              const newLeafId = findLatestLeaf(messages, newChild.message_id);
-                              setActiveMessageId(newLeafId);
-                            }}
-                          >
-                            <ChevronRightIcon className="size-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              );
-            })
-          )}
+                <div className="flex gap-3 self-end max-w-[75%]">
+                  <Skeleton className="size-8 rounded-full shrink-0" />
+                  <div className="flex flex-col gap-2">
+                    <Skeleton className="h-10 w-48 rounded-2xl rounded-tr-none" />
+                  </div>
+                </div>
+                <div className="flex gap-3 self-start max-w-[75%]">
+                  <Skeleton className="size-8 rounded-full shrink-0" />
+                  <div className="flex flex-col gap-2 flex-1">
+                    <Skeleton className="h-20 w-72 rounded-2xl rounded-tl-none" />
+                  </div>
+                </div>
+              </div>
+            ) : activePath.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center py-16">
+                <div className="bg-gradient-to-br from-primary/10 to-primary/5 p-4 rounded-2xl mb-5 ring-1 ring-primary/10">
+                  <MessageSquareIcon className="size-8 text-primary/60" />
+                </div>
+                <h3 className="font-semibold text-foreground text-sm">No message history</h3>
+                <p className="text-xs text-muted-foreground mt-1.5 max-w-xs leading-relaxed">
+                  Send your first message to initialize the LangGraph agent chain in this session.
+                </p>
+              </div>
+            ) : (
+              activePath.map((msg) => {
+                const isUser = msg.role === 'user';
+                const children = messages.filter((m) => m.parent_message_id === msg.message_id);
+                const nextMsgInPath = activePath[activePath.indexOf(msg) + 1];
+                const activeChildId = nextMsgInPath ? nextMsgInPath.message_id : null;
+                const activeChildIndex = children.findIndex((c) => c.message_id === activeChildId);
 
-          {/* Query Pending/Typing Skeleton */}
-          {sendingQuery && (
-            <div className="flex gap-3 max-w-[85%] self-start">
-              <div className="size-8 rounded-full flex items-center justify-center flex-shrink-0 bg-muted border border-slate-200 dark:border-slate-800">
-                <BotIcon className="size-4 text-muted-foreground animate-pulse" />
-              </div>
-              <div className="flex flex-col gap-1 w-64">
-                <Skeleton className="h-10 w-full rounded-2xl rounded-tl-none" />
-              </div>
-            </div>
-          )}
-          <div ref={chatEndRef} />
+                return (
+                  <ChatMessage
+                    key={msg.message_id}
+                    message={msg}
+                    onBranch={setParentMsgId}
+                    onFeedback={handleFeedback}
+                    onCitationClick={(citation) => {
+                      setSelectedCitation(citation);
+                      setIsDrawerOpen(true);
+                    }}
+                    ratings={ratings}
+                  >
+                    {children.length > 1 && (
+                      <BranchSwitcher
+                        currentIndex={activeChildIndex !== -1 ? activeChildIndex : 0}
+                        totalBranches={children.length}
+                        isUser={isUser}
+                        onPrev={() => {
+                          const currIdx = activeChildIndex !== -1 ? activeChildIndex : 0;
+                          const prevIdx = (currIdx - 1 + children.length) % children.length;
+                          const newLeafId = findLatestLeaf(messages, children[prevIdx].message_id);
+                          setActiveMessageId(newLeafId);
+                        }}
+                        onNext={() => {
+                          const currIdx = activeChildIndex !== -1 ? activeChildIndex : 0;
+                          const nextIdx = (currIdx + 1) % children.length;
+                          const newLeafId = findLatestLeaf(messages, children[nextIdx].message_id);
+                          setActiveMessageId(newLeafId);
+                        }}
+                      />
+                    )}
+                  </ChatMessage>
+                );
+              })
+            )}
+
+            {sendingQuery && <StreamingSkeleton />}
+            <div ref={chatEndRef} />
+          </div>
         </div>
 
-        {/* Input & Form Panel */}
-        <div className="p-4 border-t bg-muted/10 flex flex-col gap-2">
-          {/* Active branch indicators */}
-          {parentMsgId && (
-            <div className="flex items-center justify-between bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 px-3 py-1.5 rounded-lg text-xs">
-              <div className="flex items-center gap-1.5">
-                <GitBranchIcon className="size-3.5" />
-                <span>
-                  Branching thread from message:{' '}
-                  <span className="font-mono font-bold bg-indigo-500/20 px-1.5 py-0.5 rounded">
-                    {parentMsgId.substring(0, 8)}...
-                  </span>
-                </span>
-              </div>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-5 hover:bg-indigo-500/20 text-indigo-500"
-                onClick={() => setParentMsgId(null)}
-              >
-                <XIcon className="size-3" />
-              </Button>
-            </div>
-          )}
-
-          <form onSubmit={handleSendQuery} className="flex gap-2">
-            <Input
-              placeholder="Ask anything, agent orchestrator will route your query..."
-              value={queryInput}
-              onChange={(e) => setQueryInput(e.target.value)}
-              disabled={sendingQuery}
-              className="flex-grow bg-background"
-            />
-            <Button type="submit" disabled={sendingQuery || !queryInput.trim()} className="px-4 gap-1.5">
-              {sendingQuery ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
-              <span>Send</span>
-            </Button>
-          </form>
-        </div>
+        <ChatInput
+          onSend={handleSendQuery}
+          sendingQuery={sendingQuery}
+          parentMsgId={parentMsgId}
+          onCancelBranch={() => setParentMsgId(null)}
+        />
       </Card>
+
       <CitationDrawer
         isOpen={isDrawerOpen}
         onOpenChange={setIsDrawerOpen}

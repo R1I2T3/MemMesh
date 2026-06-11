@@ -8,7 +8,7 @@ test.describe('CRAG Web Fallback E2E Tests', () => {
     await page.goto('http://localhost:5173/dashboard/chat');
 
     // 2. Verify the chat page loaded
-    await expect(page.locator('#chat-title')).toHaveText('Chat Interface Console');
+    await expect(page.locator('#chat-title')).toHaveText('Chat Interface');
 
     // 3. Create a unique new chat session to run in isolation
     const newSessionInput = page.locator('#new-session-input');
@@ -16,7 +16,7 @@ test.describe('CRAG Web Fallback E2E Tests', () => {
     await page.locator('#add-session-btn').click();
 
     // Check that our new session is active (the header should display the session name)
-    await expect(page.locator('span.font-mono.text-indigo-500')).toHaveText(sessionName);
+    await expect(page.locator('#chat-title + p span')).toHaveText(sessionName);
 
     // 4. Send a message designed to trigger the CRAG web search fallback
     // In mock mode (MOCK_LLM=true), any query containing the term "irrelevant"

@@ -7,6 +7,7 @@ import { getStoredAuth } from '../utils/auth';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { LayoutDashboardIcon } from 'lucide-react';
 
 export const Route = createRoute({
   getParentRoute: () => rootRoute,
@@ -63,53 +64,81 @@ function LoginHome() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
-      <div className="w-full max-w-md flex flex-col gap-4">
-        <div className="flex flex-col gap-1 text-center">
-          <h1 className="text-3xl font-bold tracking-tight">MemMesh</h1>
-          <p id="system-status" className="text-sm text-muted-foreground">System: {status}</p>
+    <div className="min-h-screen bg-mesh-gradient flex items-center justify-center p-4">
+      <div className="w-full max-w-sm flex flex-col gap-6">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="flex items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 p-3 text-white shadow-sm">
+            <LayoutDashboardIcon className="size-7" />
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">MemMesh</h1>
+            <p id="system-status" className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+              <span className={`size-1.5 rounded-full ${status === 'operational' ? 'bg-emerald-500' : status === 'unreachable' ? 'bg-destructive' : 'bg-amber-500'}`} />
+              System: {status}
+            </p>
+          </div>
         </div>
-        <Card className="bg-card border-border text-card-foreground">
+        <Card className="bg-card border-border text-card-foreground shadow-sm">
           <form onSubmit={handleLogin}>
-            <CardHeader>
-              <CardTitle className="text-xl">Welcome Back</CardTitle>
-              <CardDescription className="text-muted-foreground">Login to your account to continue</CardDescription>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg font-semibold tracking-tight">Welcome Back</CardTitle>
+              <CardDescription className="text-xs text-muted-foreground">
+                Sign in to your account to continue
+              </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <label htmlFor="email-input" className="text-sm font-medium">Email address</label>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="email-input" className="text-xs font-medium text-foreground/80">
+                  Email address
+                </label>
                 <Input
                   id="email-input"
                   type="email"
+                  autoComplete="email"
                   placeholder="name@example.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
-                  className="bg-background border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring focus-visible:border-border"
+                  className="bg-background border-input text-foreground placeholder:text-muted-foreground/60 focus-visible:ring-2 focus-visible:ring-primary/20 h-9"
                 />
               </div>
-              <div className="flex flex-col gap-2">
-                <label htmlFor="password-input" className="text-sm font-medium">Password</label>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="password-input" className="text-xs font-medium text-foreground/80">
+                  Password
+                </label>
                 <Input
                   id="password-input"
                   type="password"
+                  autoComplete="current-password"
                   placeholder="••••••••"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
-                  className="bg-background border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring focus-visible:border-border"
+                  className="bg-background border-input text-foreground placeholder:text-muted-foreground/60 focus-visible:ring-2 focus-visible:ring-primary/20 h-9"
                 />
               </div>
-              {error && <p id="login-error" className="text-sm text-destructive font-medium">{error}</p>}
+              {error && (
+                <p id="login-error" className="text-xs text-destructive font-medium flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-destructive shrink-0" />
+                  {error}
+                </p>
+              )}
             </CardContent>
-            <CardFooter className="flex flex-col gap-2">
+            <CardFooter className="pt-1">
               <Button
                 id="login-button"
                 type="submit"
                 disabled={loading}
-                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
+                className="w-full h-9 font-medium transition-all duration-200 active:scale-[0.98]"
               >
-                {loading ? 'Logging in...' : 'Sign In'}
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="size-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    Logging in...
+                  </span>
+                ) : (
+                  'Sign In'
+                )}
               </Button>
             </CardFooter>
           </form>

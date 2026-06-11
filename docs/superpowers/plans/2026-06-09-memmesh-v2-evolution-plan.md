@@ -15,6 +15,7 @@
 ### Task 0.1: Real SSE Streaming with LangGraph Async
 
 **Files:**
+
 - Modify: `backend/agents/graph_orchestrator.py`
 - Modify: `backend/api/routes/query.py`
 - Create: `backend/agents/telemetry.py`
@@ -245,6 +246,7 @@ git commit -m "feat: real SSE streaming with LangGraph async and telemetry event
 ### Task 0.2: API Design — POST /api/query + X-Active-Team-ID
 
 **Files:**
+
 - Modify: `backend/api/routes/query.py`
 - Modify: `frontend/src/routes/_dashboard.chat.tsx`
 - Modify: `frontend/src/lib/api.ts`
@@ -358,20 +360,24 @@ In `frontend/src/lib/api.ts`, add:
 
 ```typescript
 export function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('token');
-  const teamId = localStorage.getItem('active_team_id');
+  const token = localStorage.getItem("token");
+  const teamId = localStorage.getItem("active_team_id");
   const headers: Record<string, string> = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  if (teamId) headers['X-Active-Team-ID'] = teamId;
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (teamId) headers["X-Active-Team-ID"] = teamId;
   return headers;
 }
 
-export async function postQuery(query: string, sessionId: string, parentMsgId?: string) {
+export async function postQuery(
+  query: string,
+  sessionId: string,
+  parentMsgId?: string,
+) {
   const body: any = { query, session_id: sessionId };
   if (parentMsgId) body.parent_msg_id = parentMsgId;
   return fetch(`${API_BASE}/api/query`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
   });
 }
@@ -384,7 +390,7 @@ In `frontend/src/routes/_dashboard.chat.tsx`, replace the SSE URL construction i
 ```typescript
 // Replace the queryParams/fetchEventSource section with:
 const headers: Record<string, string> = {
-  'Content-Type': 'application/json',
+  "Content-Type": "application/json",
   ...authHeaders(),
 };
 
@@ -395,7 +401,7 @@ const body = JSON.stringify({
 });
 
 await fetchEventSource(`${API_BASE}/api/query/stream`, {
-  method: 'POST',
+  method: "POST",
   headers,
   body,
   signal: abortController.signal,
@@ -419,6 +425,7 @@ git commit -m "feat: POST /api/query, auth/register, auth/refresh, X-Active-Team
 ### Task 0.3: MySQL Schema Alignment — Add Missing Tables
 
 **Files:**
+
 - Modify: `backend/models.py`
 - Create: `backend/db/migrations/versions/004_align_v2_schema.py`
 - Test: `backend/tests/test_models.py`
@@ -673,6 +680,7 @@ git commit -m "feat: MySQL schema alignment - add V2 spec tables"
 ### Task 0.4: Neo4j Per-Tenant Database Isolation
 
 **Files:**
+
 - Modify: `backend/db/neo4j.py`
 - Modify: `backend/agents/graph_orchestrator.py`
 - Modify: `backend/ingestion/extractor.py`
@@ -773,6 +781,7 @@ git commit -m "fix: Neo4j per-tenant database isolation - remove team_id propert
 ### Task 0.5: Guardrails AI — Working Safety Shield
 
 **Files:**
+
 - Modify: `backend/agents/safety.py`
 - Modify: `backend/requirements.txt`
 
@@ -886,6 +895,7 @@ git commit -m "fix: replace Guardrails hub with presidio PII detection and patte
 ### Task 0.6: Rate Limiting
 
 **Files:**
+
 - Modify: `backend/main.py`
 - Modify: `backend/config.py`
 - Modify: `backend/requirements.txt`
@@ -893,6 +903,7 @@ git commit -m "fix: replace Guardrails hub with presidio PII detection and patte
 - [ ] **Step 1: Add slowapi dependency**
 
 Add to `backend/requirements.txt`:
+
 ```
 slowapi>=0.1.9
 ```
@@ -956,6 +967,7 @@ git commit -m "fix: add rate limiting with slowapi + Redis backend"
 ### Task 0.7: RBAC Alignment with V2 Spec
 
 **Files:**
+
 - Modify: `backend/auth/middleware.py`
 - Modify: `backend/api/routes/admin.py`
 - Modify: `backend/api/routes/upload.py`
@@ -1008,36 +1020,7 @@ def require_team_role(min_role: str):
     return dep
 ```
 
-- [ ] **Step 2: Update upload endpoint to require team_lead**
-
-In `backend/api/routes/upload.py`, change upload dependency:
-
-```python
-from backend.auth.middleware import require_team_role
-
-@router.post("/upload")
-async def upload_document(
-    file: UploadFile = File(...),
-    x_active_team_id: str = Depends(require_team_role("team_lead")),
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    # Remove auto-join logic
-    ...
-```
-
-- [ ] **Step 3: Align role names**
-
-In `backend/api/routes/admin.py`, change MemberAdd roles from `["member", "admin", "owner"]` to `["user", "team_lead"]`:
-
-```python
-class MemberAdd(BaseModel):
-    team_id: str
-    user_id: str
-    role: Literal["user", "team_lead"] = "user"
-```
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 2: Commit**
 
 ```bash
 git add backend/auth/middleware.py backend/api/routes/upload.py backend/api/routes/admin.py
@@ -1049,6 +1032,7 @@ git commit -m "fix: RBAC alignment - team membership validation, team_lead role 
 ### Task 0.8: Neo4j Connection Pooling
 
 **Files:**
+
 - Modify: `backend/db/neo4j.py`
 
 - [ ] **Step 1: Convert to connection-pooled singleton**
@@ -1095,6 +1079,7 @@ git commit -m "fix: Neo4j connection pooling - singleton driver with 50 connecti
 ### Task 0.9: Redis Port Fix
 
 **Files:**
+
 - Modify: `docker-compose.yml`
 - Modify: `.env.example`
 
@@ -1118,6 +1103,7 @@ git commit -m "fix: Redis port mapping - use standard port 6379"
 ### Task 0.10: Query History in Retrieval
 
 **Files:**
+
 - Modify: `backend/agents/retriever.py`
 - Modify: `backend/agents/graph_orchestrator.py`
 
@@ -1171,6 +1157,7 @@ git commit -m "feat: pass conversation history to retrieval for multi-turn conte
 ### Task 0.11: Pagination on Session List
 
 **Files:**
+
 - Modify: `backend/api/routes/query.py`
 
 - [ ] **Step 1: Add pagination params**
@@ -1204,6 +1191,7 @@ git commit -m "fix: paginate session list - add offset/limit with total count"
 ### Task 0.12: SSE Error Handling
 
 **Files:**
+
 - Modify: `backend/api/routes/query.py`
 - Modify: `frontend/src/routes/_dashboard.chat.tsx`
 
@@ -1264,6 +1252,7 @@ git commit -m "fix: SSE error handling - no infinite retry on 4xx, emit error ev
 ### Task 0.13: Entity Extraction — Stop Generating Noise
 
 **Files:**
+
 - Modify: `backend/ingestion/extractor.py`
 
 - [ ] **Step 1: Remove heuristic sequential relationships**
@@ -1302,6 +1291,7 @@ git commit -m "fix: stop generating false sequential relationships in heuristic 
 ### Task 0.14: Celery Fork Safety
 
 **Files:**
+
 - Modify: `backend/db/weaviate.py`
 - Modify: `backend/db/neo4j.py`
 - Modify: `backend/tasks/celery_app.py`
@@ -1352,6 +1342,7 @@ git commit -m "fix: Celery fork safety - remove global singletons, use worker li
 ### Task 0.15: Test Infrastructure — MySQL-Compatible Testing
 
 **Files:**
+
 - Create: `backend/tests/conftest.py`
 - Modify: `.github/workflows/ci.yml`
 
@@ -1406,6 +1397,7 @@ git commit -m "fix: test infrastructure - testcontainers MySQL support with SQLi
 ### Task 1.1: RAG Evaluation Dashboard
 
 **Files:**
+
 - Create: `backend/db/migrations/versions/005_eval_scores.py`
 - Modify: `backend/models.py`
 - Modify: `backend/api/routes/eval.py`
@@ -1471,24 +1463,33 @@ def get_eval_scores(
 Create `frontend/src/routes/_dashboard.eval.tsx`:
 
 ```tsx
-import { createRoute } from '@tanstack/react-router';
-import { Route as dashboardRoute } from './_dashboard';
-import { useState, useEffect } from 'react';
-import { apiFetch } from '../lib/api';
+import { createRoute } from "@tanstack/react-router";
+import { Route as dashboardRoute } from "./_dashboard";
+import { useState, useEffect } from "react";
+import { apiFetch } from "../lib/api";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
-} from 'recharts';
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 export const Route = createRoute({
   getParentRoute: () => dashboardRoute,
-  path: '/eval',
+  path: "/eval",
   component: EvalDashboard,
 });
 
 function EvalDashboard() {
   const [data, setData] = useState<any[]>([]);
   useEffect(() => {
-    apiFetch('/api/eval/scores?days=30').then(r => r.json()).then(d => setData(d.scores || []));
+    apiFetch("/api/eval/scores?days=30")
+      .then((r) => r.json())
+      .then((d) => setData(d.scores || []));
   }, []);
 
   return (
@@ -1516,9 +1517,15 @@ function EvalDashboard() {
 Add to `frontend/src/router.tsx`:
 
 ```tsx
-import { Route as evalRoute } from './routes/_dashboard.eval';
+import { Route as evalRoute } from "./routes/_dashboard.eval";
 // Add evalRoute to dashboard children
-dashboardLayoutRoute.addChildren([dashboardIndexRoute, chatRoute, docsRoute, adminRoute, evalRoute])
+dashboardLayoutRoute.addChildren([
+  dashboardIndexRoute,
+  chatRoute,
+  docsRoute,
+  adminRoute,
+  evalRoute,
+]);
 ```
 
 - [ ] **Step 6: Commit**
@@ -1533,6 +1540,7 @@ git commit -m "feat: RAG evaluation dashboard with score history and trend chart
 ### Task 1.2: Audit Logging
 
 **Files:**
+
 - Modify: `backend/models.py`
 - Modify: `backend/api/routes/query.py`
 - Modify: `backend/api/routes/admin.py`
@@ -1637,6 +1645,7 @@ git commit -m "feat: audit logging - track queries, latency, and retrieval sourc
 ### Task 1.3: Analytics Dashboard
 
 **Files:**
+
 - Create: `backend/tasks/analytics_worker.py`
 - Create: `backend/api/routes/analytics.py`
 - Create: `frontend/src/routes/_dashboard.analytics.tsx`
@@ -1726,14 +1735,14 @@ app.include_router(analytics_router)
 Create `frontend/src/routes/_dashboard.analytics.tsx`:
 
 ```tsx
-import { createRoute } from '@tanstack/react-router';
-import { Route as dashboardRoute } from './_dashboard';
-import { useState, useEffect } from 'react';
-import { apiFetch } from '../lib/api';
+import { createRoute } from "@tanstack/react-router";
+import { Route as dashboardRoute } from "./_dashboard";
+import { useState, useEffect } from "react";
+import { apiFetch } from "../lib/api";
 
 export const Route = createRoute({
   getParentRoute: () => dashboardRoute,
-  path: '/analytics',
+  path: "/analytics",
   component: AnalyticsDashboard,
 });
 
@@ -1741,25 +1750,32 @@ function AnalyticsDashboard() {
   const [analytics, setAnalytics] = useState<any>(null);
 
   useEffect(() => {
-    apiFetch('/api/admin/analytics')
-      .then(r => r.json())
-      .then(d => setAnalytics(d))
+    apiFetch("/api/admin/analytics")
+      .then((r) => r.json())
+      .then((d) => setAnalytics(d))
       .catch(() => {});
   }, []);
 
   if (!analytics) return <div className="p-6">Loading analytics...</div>;
-  if (analytics.message) return <div className="p-6 text-muted-foreground">{analytics.message}</div>;
+  if (analytics.message)
+    return <div className="p-6 text-muted-foreground">{analytics.message}</div>;
 
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold">Analytics Dashboard</h1>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="rounded-lg border p-4 bg-card">
-          <div className="text-sm text-muted-foreground">Queries (last hour)</div>
-          <div className="text-3xl font-bold">{analytics.queries_last_hour}</div>
+          <div className="text-sm text-muted-foreground">
+            Queries (last hour)
+          </div>
+          <div className="text-3xl font-bold">
+            {analytics.queries_last_hour}
+          </div>
         </div>
         <div className="rounded-lg border p-4 bg-card">
-          <div className="text-sm text-muted-foreground">Queries (last 24h)</div>
+          <div className="text-sm text-muted-foreground">
+            Queries (last 24h)
+          </div>
           <div className="text-3xl font-bold">{analytics.queries_last_day}</div>
         </div>
         <div className="rounded-lg border p-4 bg-card">
@@ -1767,12 +1783,18 @@ function AnalyticsDashboard() {
           <div className="text-3xl font-bold">{analytics.avg_latency_ms}ms</div>
         </div>
         <div className="rounded-lg border p-4 bg-card">
-          <div className="text-sm text-muted-foreground">Unique Users (24h)</div>
-          <div className="text-3xl font-bold">{analytics.unique_users_last_day}</div>
+          <div className="text-sm text-muted-foreground">
+            Unique Users (24h)
+          </div>
+          <div className="text-3xl font-bold">
+            {analytics.unique_users_last_day}
+          </div>
         </div>
         <div className="rounded-lg border p-4 bg-card">
           <div className="text-sm text-muted-foreground">Positive Feedback</div>
-          <div className="text-3xl font-bold">{analytics.positive_feedback}/{analytics.total_feedback}</div>
+          <div className="text-3xl font-bold">
+            {analytics.positive_feedback}/{analytics.total_feedback}
+          </div>
         </div>
       </div>
     </div>
@@ -1785,8 +1807,15 @@ function AnalyticsDashboard() {
 In `frontend/src/router.tsx`, add to dashboard children:
 
 ```tsx
-import { Route as analyticsRoute } from './routes/_dashboard.analytics';
-dashboardLayoutRoute.addChildren([dashboardIndexRoute, chatRoute, docsRoute, adminRoute, evalRoute, analyticsRoute])
+import { Route as analyticsRoute } from "./routes/_dashboard.analytics";
+dashboardLayoutRoute.addChildren([
+  dashboardIndexRoute,
+  chatRoute,
+  docsRoute,
+  adminRoute,
+  evalRoute,
+  analyticsRoute,
+]);
 ```
 
 - [ ] **Step 6: Commit**
@@ -1803,6 +1832,7 @@ git commit -m "feat: analytics dashboard with hourly aggregation"
 ### Task 2.1: Document Versioning
 
 **Files:**
+
 - Create: `backend/ingestion/versioning.py`
 - Modify: `backend/api/routes/upload.py`
 - Modify: `backend/tasks/ingestion_worker.py`
@@ -1869,6 +1899,7 @@ git commit -m "feat: document versioning with content hash detection"
 ### Task 2.2: PDF Viewer with Highlighted Citations
 
 **Files:**
+
 - Create: `backend/api/routes/documents.py`
 - Create: `frontend/src/components/pdf-viewer.tsx`
 - Modify: `frontend/src/components/CitationDrawer.tsx`
@@ -1910,11 +1941,11 @@ def get_document_pdf(
 Create `frontend/src/components/pdf-viewer.tsx`:
 
 ```tsx
-import { useState } from 'react';
-import { Document, Page, pdfjs } from 'react-pdf';
-import { apiFetch } from '../lib/api';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-import 'react-pdf/dist/Page/TextLayer.css';
+import { useState } from "react";
+import { Document, Page, pdfjs } from "react-pdf";
+import { apiFetch } from "../lib/api";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs`;
 
@@ -1933,7 +1964,9 @@ export function PdfViewer({ docId, pageNumber = 1, bbox }: PdfViewerProps) {
         file={`${API_BASE}/api/documents/${docId}/pdf`}
         onLoadSuccess={({ numPages }) => setNumPages(numPages)}
         loading={<div className="p-4 text-center">Loading PDF...</div>}
-        error={<div className="p-4 text-center text-red-500">Failed to load PDF</div>}
+        error={
+          <div className="p-4 text-center text-red-500">Failed to load PDF</div>
+        }
       >
         <Page
           pageNumber={pageNumber}
@@ -1952,29 +1985,27 @@ export function PdfViewer({ docId, pageNumber = 1, bbox }: PdfViewerProps) {
 In `frontend/src/components/CitationDrawer.tsx`, add a "Open in PDF Viewer" button when citation has a parent_id:
 
 ```tsx
-import { PdfViewer } from './pdf-viewer';
+import { PdfViewer } from "./pdf-viewer";
 
 // Inside the drawer content, after citation details:
-{citation?.parent_id && (
-  <div className="mt-4">
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => setShowPdf(!showPdf)}
-    >
-      {showPdf ? 'Hide PDF' : 'View in Document'}
-    </Button>
-    {showPdf && (
-      <div className="mt-2 max-h-96 overflow-auto">
-        <PdfViewer
-          docId={citation.parent_id}
-          pageNumber={citation.page_number || 1}
-          bbox={citation.bbox}
-        />
-      </div>
-    )}
-  </div>
-)}
+{
+  citation?.parent_id && (
+    <div className="mt-4">
+      <Button variant="outline" size="sm" onClick={() => setShowPdf(!showPdf)}>
+        {showPdf ? "Hide PDF" : "View in Document"}
+      </Button>
+      {showPdf && (
+        <div className="mt-2 max-h-96 overflow-auto">
+          <PdfViewer
+            docId={citation.parent_id}
+            pageNumber={citation.page_number || 1}
+            bbox={citation.bbox}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 ```
 
 Add state at the top of the component:
@@ -1992,195 +2023,12 @@ git commit -m "feat: PDF viewer with citation scroll-to-position"
 
 ---
 
-### Task 2.3: Collaborative Annotations
-
-**Files:**
-- Create: `backend/api/routes/annotations.py`
-- Modify: `backend/models.py`
-- Create: `frontend/src/components/annotation-layer.tsx`
-- Create: `frontend/src/components/annotation-thread.tsx`
-- Modify: `frontend/src/routes/_dashboard.docs.tsx`
-
-- [ ] **Step 1: Add Annotation model**
-
-In `backend/models.py`:
-
-```python
-class Annotation(Base):
-    __tablename__ = "annotations"
-    annotation_id = Column(String(36), primary_key=True)
-    doc_id = Column(String(36), ForeignKey("source_docs.doc_id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
-    anchor_start = Column(Integer, nullable=False)
-    anchor_end = Column(Integer, nullable=False)
-    highlighted_text = Column(Text, nullable=False)
-    comment = Column(Text, nullable=False)
-    parent_annotation_id = Column(String(36), nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-```
-
-- [ ] **Step 2: Create annotation CRUD endpoints**
-
-Create `backend/api/routes/annotations.py`:
-
-```python
-import uuid
-import logging
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from backend.db.mysql import get_db
-from backend.models import Annotation
-from backend.auth.middleware import get_current_user
-
-logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/documents", tags=["annotations"])
-
-class AnnotationCreate(BaseModel):
-    doc_id: str
-    anchor_start: int
-    anchor_end: int
-    highlighted_text: str
-    comment: str
-    parent_annotation_id: str | None = None
-
-@router.post("/annotations", status_code=201)
-def create_annotation(
-    payload: AnnotationCreate,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    annotation = Annotation(
-        annotation_id=str(uuid.uuid4()),
-        doc_id=payload.doc_id,
-        user_id=current_user.get("sub"),
-        anchor_start=payload.anchor_start,
-        anchor_end=payload.anchor_end,
-        highlighted_text=payload.highlighted_text,
-        comment=payload.comment,
-        parent_annotation_id=payload.parent_annotation_id,
-    )
-    db.add(annotation)
-    db.commit()
-    return {"annotation_id": annotation.annotation_id}
-
-@router.get("/{doc_id}/annotations")
-def list_annotations(
-    doc_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    annotations = db.query(Annotation).filter(
-        Annotation.doc_id == doc_id
-    ).order_by(Annotation.created_at.asc()).all()
-    return {
-        "annotations": [
-            {
-                "annotation_id": a.annotation_id,
-                "user_id": a.user_id,
-                "anchor_start": a.anchor_start,
-                "anchor_end": a.anchor_end,
-                "highlighted_text": a.highlighted_text,
-                "comment": a.comment,
-                "parent_annotation_id": a.parent_annotation_id,
-                "created_at": a.created_at.isoformat() if a.created_at else None,
-            }
-            for a in annotations
-        ]
-    }
-
-@router.delete("/annotations/{annotation_id}")
-def delete_annotation(
-    annotation_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    annotation = db.query(Annotation).filter_by(annotation_id=annotation_id).first()
-    if not annotation:
-        raise HTTPException(status_code=404, detail="Annotation not found")
-    if annotation.user_id != current_user.get("sub") and current_user.get("role") != "superadmin":
-        raise HTTPException(status_code=403, detail="Not authorized")
-    db.delete(annotation)
-    db.commit()
-    return {"status": "deleted"}
-```
-
-- [ ] **Step 3: Create annotation React components**
-
-Create `frontend/src/components/annotation-layer.tsx`:
-
-```tsx
-import { useState, useEffect } from 'react';
-import { apiFetch } from '../lib/api';
-
-interface Annotation {
-  annotation_id: string;
-  user_id: string;
-  anchor_start: number;
-  anchor_end: number;
-  highlighted_text: string;
-  comment: string;
-  created_at: string;
-}
-
-interface AnnotationLayerProps {
-  docId: string;
-  content: string;
-}
-
-export function AnnotationLayer({ docId, content }: AnnotationLayerProps) {
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
-  const [selected, setSelected] = useState<Annotation | null>(null);
-
-  useEffect(() => {
-    apiFetch(`/api/documents/${docId}/annotations`)
-      .then(r => r.json())
-      .then(d => setAnnotations(d.annotations || []))
-      .catch(() => {});
-  }, [docId]);
-
-  return (
-    <div className="relative">
-      <div className="whitespace-pre-wrap text-sm leading-relaxed">
-        {annotations.map(a => (
-          <button
-            key={a.annotation_id}
-            className="bg-yellow-200 dark:bg-yellow-800/40 cursor-pointer hover:bg-yellow-300 rounded px-0.5"
-            onClick={() => setSelected(a)}
-            title={a.comment}
-          >
-            {content.slice(a.anchor_start, a.anchor_end)}
-          </button>
-        ))}
-      </div>
-      {selected && (
-        <div className="fixed bottom-4 right-4 w-80 rounded-lg border bg-card p-4 shadow-lg">
-          <p className="text-sm font-medium">Comment</p>
-          <p className="text-sm text-muted-foreground mt-1">{selected.comment}</p>
-          <p className="text-xs text-muted-foreground mt-2">— {selected.user_id}</p>
-          <button className="mt-2 text-xs text-red-500" onClick={() => setSelected(null)}>Close</button>
-        </div>
-      )}
-    </div>
-  );
-}
-```
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add backend/models.py backend/api/routes/annotations.py frontend/src/components/annotation-layer.tsx frontend/src/components/annotation-thread.tsx
-git commit -m "feat: collaborative document annotations with comment threads"
-```
-
----
-
 ## Phase 3: Integration & Automation
 
 ### Task 3.1: Semantic Caching
 
 **Files:**
+
 - Create: `backend/cache/semantic_cache.py`
 - Modify: `backend/agents/graph_orchestrator.py`
 - Modify: `backend/config.py`
@@ -2303,211 +2151,12 @@ git commit -m "feat: semantic caching with embedding similarity and Redis backen
 
 ---
 
-### Task 3.2: Email Ingestion (IMAP/POP3)
-
-**Files:**
-- Create: `backend/tasks/email_worker.py`
-- Modify: `backend/tasks/celery_app.py`
-- Modify: `backend/config.py`
-
-- [ ] **Step 1: Add config settings**
-
-In `backend/config.py`:
-
-```python
-IMAP_HOST: str = ""
-IMAP_PORT: int = 993
-IMAP_USER: str = ""
-IMAP_PASSWORD: str = ""
-IMAP_FOLDER: str = "INBOX"
-IMAP_POLL_INTERVAL_MINUTES: int = 60
-```
-
-- [ ] **Step 2: Create email ingestion worker**
-
-Create `backend/tasks/email_worker.py`:
-
-```python
-import email
-import logging
-from email.header import decode_header
-from backend.tasks.celery_app import celery_app
-from backend.config import settings
-
-logger = logging.getLogger(__name__)
-
-@celery_app.task(name="backend.tasks.email_worker.poll_inbox")
-def poll_inbox():
-    if not settings.IMAP_HOST:
-        logger.info("IMAP not configured, skipping email poll")
-        return {"status": "skipped"}
-
-    import imaplib
-    mail = imaplib.IMAP4_SSL(settings.IMAP_HOST, settings.IMAP_PORT)
-    try:
-        mail.login(settings.IMAP_USER, settings.IMAP_PASSWORD)
-        mail.select(settings.IMAP_FOLDER)
-        status, messages = mail.search(None, "UNSEEN")
-        if status != "OK":
-            return {"status": "no_unseen"}
-
-        for num in messages[0].split():
-            status, msg_data = mail.fetch(num, "(RFC822)")
-            if status != "OK":
-                continue
-            raw_email = msg_data[0][1]
-            msg = email.message_from_bytes(raw_email)
-            subject = decode_header(msg["Subject"])[0][0] or "No Subject"
-            body = ""
-            if msg.is_multipart():
-                for part in msg.walk():
-                    if part.get_content_type() == "text/plain":
-                        body = part.get_payload(decode=True).decode("utf-8", errors="ignore")
-                        break
-            else:
-                body = msg.get_payload(decode=True).decode("utf-8", errors="ignore")
-
-            # Queue document ingestion for email body + attachments
-            logger.info(f"Ingested email: {subject} ({len(body)} chars)")
-
-        mail.store("1:*", "+FLAGS", "\\Seen")
-        return {"status": "success", "emails_processed": len(messages[0])}
-    finally:
-        mail.logout()
-```
-
-- [ ] **Step 3: Add beat schedule**
-
-In `backend/tasks/celery_app.py`:
-
-```python
-"poll-email-hourly": {
-    "task": "backend.tasks.email_worker.poll_inbox",
-    "schedule": settings.IMAP_POLL_INTERVAL_MINUTES * 60.0,
-}
-```
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add backend/tasks/email_worker.py backend/config.py backend/tasks/celery_app.py
-git commit -m "feat: email ingestion via IMAP with Celery Beat polling"
-```
-
----
-
-### Task 3.3: Real-time Document Sync (Google Drive / S3)
-
-**Files:**
-- Create: `backend/tasks/sync/__init__.py`
-- Create: `backend/tasks/sync/google_drive_watch.py`
-- Create: `backend/tasks/sync/s3_watch.py`
-- Create: `backend/tasks/sync/sync_orchestrator.py`
-- Create: `backend/api/routes/sync.py`
-- Modify: `backend/main.py`
-
-- [ ] **Step 1: Create sync orchestrator**
-
-Create `backend/tasks/sync/sync_orchestrator.py`:
-
-```python
-import logging
-from backend.tasks.celery_app import celery_app
-
-logger = logging.getLogger(__name__)
-
-@celery_app.task(name="backend.tasks.sync.sync_orchestrator.sync_source")
-def sync_source(source_id: str, team_id: str, source_type: str, config: dict):
-    if source_type == "gdrive":
-        from .google_drive_watch import sync_google_drive
-        return sync_google_drive(source_id, team_id, config)
-    elif source_type == "s3":
-        from .s3_watch import sync_s3
-        return sync_s3(source_id, team_id, config)
-    else:
-        logger.warning(f"Unknown sync source type: {source_type}")
-        return {"status": "error", "message": f"Unknown type: {source_type}"}
-```
-
-- [ ] **Step 2: Create sync management API**
-
-Create `backend/api/routes/sync.py`:
-
-```python
-import uuid
-import logging
-from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from backend.db.mysql import get_db
-from backend.auth.middleware import require_global_role
-
-logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/admin/sync", tags=["sync"], dependencies=[Depends(require_global_role("superadmin"))])
-
-SYNC_SOURCES: dict = {}  # In-memory for MVP; persist to MySQL for production
-
-class SyncSourceCreate(BaseModel):
-    source_type: str  # "gdrive" | "s3"
-    config: dict
-
-@router.post("/sources")
-def create_sync_source(payload: SyncSourceCreate):
-    source_id = str(uuid.uuid4())
-    SYNC_SOURCES[source_id] = {
-        "id": source_id,
-        "type": payload.source_type,
-        "config": payload.config,
-        "created_at": datetime.utcnow().isoformat(),
-        "last_synced_at": None,
-    }
-    return {"source_id": source_id}
-
-@router.get("/sources")
-def list_sync_sources():
-    return {"sources": list(SYNC_SOURCES.values())}
-
-@router.post("/sources/{source_id}/sync")
-def trigger_sync(source_id: str):
-    from backend.tasks.sync.sync_orchestrator import sync_source
-    source = SYNC_SOURCES.get(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail="Sync source not found")
-    task = sync_source.delay(source_id, "default-team", source["type"], source["config"])
-    return {"task_id": task.id, "status": "triggered"}
-
-@router.delete("/sources/{source_id}")
-def delete_sync_source(source_id: str):
-    if source_id not in SYNC_SOURCES:
-        raise HTTPException(status_code=404, detail="Sync source not found")
-    del SYNC_SOURCES[source_id]
-    return {"status": "deleted"}
-```
-
-- [ ] **Step 3: Register sync routes in main.py**
-
-In `backend/main.py`:
-
-```python
-from backend.api.routes.sync import router as sync_router
-app.include_router(sync_router)
-```
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add backend/tasks/sync/ backend/api/routes/sync.py backend/main.py
-git commit -m "feat: real-time document sync for Google Drive and S3"
-```
-
----
-
 ## Phase 4: Knowledge & UX
 
 ### Task 4.1: Knowledge Graph Visualizer
 
 **Files:**
+
 - Create: `backend/api/routes/graph.py`
 - Create: `frontend/src/components/knowledge-graph.tsx`
 - Create: `frontend/src/components/entity-detail-panel.tsx`
@@ -2587,8 +2236,8 @@ cd frontend && npm install react-force-graph-2d
 Create `frontend/src/components/knowledge-graph.tsx`:
 
 ```tsx
-import { useEffect, useRef } from 'react';
-import ForceGraph2D from 'react-force-graph-2d';
+import { useEffect, useRef } from "react";
+import ForceGraph2D from "react-force-graph-2d";
 
 interface GraphNode {
   id: string;
@@ -2609,12 +2258,20 @@ interface KnowledgeGraphProps {
   onNodeClick?: (node: GraphNode) => void;
 }
 
-export function KnowledgeGraph({ nodes, edges, onNodeClick }: KnowledgeGraphProps) {
+export function KnowledgeGraph({
+  nodes,
+  edges,
+  onNodeClick,
+}: KnowledgeGraphProps) {
   const fgRef = useRef<any>();
 
   const graphData = {
-    nodes: nodes.map(n => ({ ...n, val: n.score })),
-    links: edges.map(e => ({ source: e.source, target: e.target, label: e.type })),
+    nodes: nodes.map((n) => ({ ...n, val: n.score })),
+    links: edges.map((e) => ({
+      source: e.source,
+      target: e.target,
+      label: e.type,
+    })),
   };
 
   return (
@@ -2622,7 +2279,13 @@ export function KnowledgeGraph({ nodes, edges, onNodeClick }: KnowledgeGraphProp
       ref={fgRef}
       graphData={graphData}
       nodeLabel="name"
-      nodeColor={n => n.type === 'Person' ? '#8884d8' : n.type === 'Organization' ? '#82ca9d' : '#ffc658'}
+      nodeColor={(n) =>
+        n.type === "Person"
+          ? "#8884d8"
+          : n.type === "Organization"
+            ? "#82ca9d"
+            : "#ffc658"
+      }
       linkLabel="label"
       linkDirectionalArrowLength={6}
       linkDirectionalParticles={2}
@@ -2639,16 +2302,16 @@ export function KnowledgeGraph({ nodes, edges, onNodeClick }: KnowledgeGraphProp
 Create `frontend/src/routes/_dashboard.graph.tsx`:
 
 ```tsx
-import { createRoute } from '@tanstack/react-router';
-import { Route as dashboardRoute } from './_dashboard';
-import { useState, useEffect } from 'react';
-import { apiFetch } from '../lib/api';
-import { KnowledgeGraph } from '../components/knowledge-graph';
-import { EntityDetailPanel } from '../components/entity-detail-panel';
+import { createRoute } from "@tanstack/react-router";
+import { Route as dashboardRoute } from "./_dashboard";
+import { useState, useEffect } from "react";
+import { apiFetch } from "../lib/api";
+import { KnowledgeGraph } from "../components/knowledge-graph";
+import { EntityDetailPanel } from "../components/entity-detail-panel";
 
 export const Route = createRoute({
   getParentRoute: () => dashboardRoute,
-  path: '/graph',
+  path: "/graph",
   component: GraphExplorer,
 });
 
@@ -2656,13 +2319,13 @@ function GraphExplorer() {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
   const [selectedEntity, setSelectedEntity] = useState(null);
-  const teamId = localStorage.getItem('active_team_id');
+  const teamId = localStorage.getItem("active_team_id");
 
   useEffect(() => {
     if (!teamId) return;
     apiFetch(`/api/team/${teamId}/graph/explore?limit=100`)
-      .then(r => r.json())
-      .then(data => {
+      .then((r) => r.json())
+      .then((data) => {
         setNodes(data.nodes || []);
         setEdges(data.edges || []);
       });
@@ -2671,7 +2334,11 @@ function GraphExplorer() {
   return (
     <div className="flex gap-4 p-4">
       <div className="flex-1">
-        <KnowledgeGraph nodes={nodes} edges={edges} onNodeClick={setSelectedEntity} />
+        <KnowledgeGraph
+          nodes={nodes}
+          edges={edges}
+          onNodeClick={setSelectedEntity}
+        />
       </div>
       {selectedEntity && (
         <div className="w-80">
@@ -2688,8 +2355,8 @@ function GraphExplorer() {
 Create `frontend/src/components/entity-detail-panel.tsx`:
 
 ```tsx
-import { useState, useEffect } from 'react';
-import { apiFetch } from '../lib/api';
+import { useState, useEffect } from "react";
+import { apiFetch } from "../lib/api";
 
 interface EntityNode {
   id: string;
@@ -2706,11 +2373,11 @@ export function EntityDetailPanel({ entity }: EntityDetailPanelProps) {
   const [neighbors, setNeighbors] = useState<any[]>([]);
 
   useEffect(() => {
-    const teamId = localStorage.getItem('active_team_id');
+    const teamId = localStorage.getItem("active_team_id");
     if (!teamId) return;
     apiFetch(`/api/team/${teamId}/graph/explore?query=${entity.name}&limit=20`)
-      .then(r => r.json())
-      .then(data => setNeighbors(data.edges || []))
+      .then((r) => r.json())
+      .then((data) => setNeighbors(data.edges || []))
       .catch(() => {});
   }, [entity]);
 
@@ -2718,10 +2385,16 @@ export function EntityDetailPanel({ entity }: EntityDetailPanelProps) {
     <div className="rounded-lg border bg-card p-4">
       <h3 className="font-semibold text-lg">{entity.name}</h3>
       <p className="text-sm text-muted-foreground">Type: {entity.type}</p>
-      <p className="text-sm text-muted-foreground">Importance: {(entity.score || 0).toFixed(2)}</p>
+      <p className="text-sm text-muted-foreground">
+        Importance: {(entity.score || 0).toFixed(2)}
+      </p>
       <div className="mt-4">
         <h4 className="text-sm font-medium mb-2">Relationships</h4>
-        {neighbors.length === 0 && <p className="text-xs text-muted-foreground">No relationships found</p>}
+        {neighbors.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No relationships found
+          </p>
+        )}
         <ul className="space-y-1">
           {neighbors.slice(0, 10).map((e, i) => (
             <li key={i} className="text-xs text-muted-foreground">
@@ -2740,8 +2413,16 @@ export function EntityDetailPanel({ entity }: EntityDetailPanelProps) {
 In `frontend/src/router.tsx`, add graph route to dashboard children:
 
 ```tsx
-import { Route as graphRoute } from './routes/_dashboard.graph';
-dashboardLayoutRoute.addChildren([dashboardIndexRoute, chatRoute, docsRoute, adminRoute, evalRoute, analyticsRoute, graphRoute])
+import { Route as graphRoute } from "./routes/_dashboard.graph";
+dashboardLayoutRoute.addChildren([
+  dashboardIndexRoute,
+  chatRoute,
+  docsRoute,
+  adminRoute,
+  evalRoute,
+  analyticsRoute,
+  graphRoute,
+]);
 ```
 
 - [ ] **Step 6: Commit**
@@ -2756,6 +2437,7 @@ git commit -m "feat: knowledge graph visualizer with force-directed graph and en
 ### Task 4.2: Export/Report Generation
 
 **Files:**
+
 - Create: `backend/export/__init__.py`
 - Create: `backend/export/renderers.py`
 - Create: `backend/api/routes/export.py`

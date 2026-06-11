@@ -63,7 +63,7 @@ test.describe('RLHF Feedback Loop & DeepEval Metrics E2E Tests', () => {
 
     // Navigate to chat
     await page.goto('http://localhost:5173/dashboard/chat');
-    await expect(page.locator('#chat-title')).toHaveText('Chat Interface Console');
+    await expect(page.locator('#chat-title')).toHaveText('Chat Interface');
 
     // Find thumbs buttons on the assistant message
     const thumbsUpBtn = page.locator('button[title="Thumbs Up"]');
@@ -78,7 +78,7 @@ test.describe('RLHF Feedback Loop & DeepEval Metrics E2E Tests', () => {
     expect(lastSubmittedRating).toBe(1);
 
     // Verify visual feedback (should have text-green class)
-    await expect(thumbsUpBtn).toHaveClass(/text-green/);
+    await expect(thumbsUpBtn).toHaveClass(/text-emerald/);
 
     // Click thumbs down
     await thumbsDownBtn.click();
@@ -119,7 +119,7 @@ test.describe('RLHF Feedback Loop & DeepEval Metrics E2E Tests', () => {
 
     // Navigate to docs
     await page.goto('http://localhost:5173/dashboard/docs');
-    await expect(page.locator('#docs-title')).toHaveText('Document Ingestion Console');
+    await expect(page.locator('#docs-title')).toHaveText('Document Ingestion');
 
     // Run DeepEval Metrics button should be visible for superadmin
     const runEvalBtn = page.locator('#run-eval-btn');

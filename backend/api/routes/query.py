@@ -248,7 +248,9 @@ async def run_query_stream(
                                 try:
                                     validated_response = validate_output(full_response)
                                 except SafetyValidationError:
-                                    validated_response = full_response
+                                    yield f"data: {json.dumps({'type': 'error', 'detail': 'Output contains toxic language and is blocked.'})}\n\n"
+                                    yield "data: [DONE]\n\n"
+                                    return
                             else:
                                 validated_response = full_response
                             await run_in_threadpool(

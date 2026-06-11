@@ -1,36 +1,22 @@
-import { createRoute, Outlet, redirect, Link, useNavigate } from '@tanstack/react-router';
+import { createRoute, Outlet, redirect, useNavigate } from '@tanstack/react-router';
 import { Route as rootRoute } from './__root';
 import { getStoredAuth, parseTokenPayload } from '../utils/auth';
-import { getSavedTheme, applyTheme, getNextTheme } from '../utils/theme';
+import { getSavedTheme, applyTheme, getNextTheme, type Theme } from '../utils/theme';
 import { useEffect, useState } from 'react';
 
 import {
   SidebarProvider,
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
   SidebarTrigger,
   SidebarInset,
 } from '@/components/ui/sidebar';
+import { SidebarNav } from '@/components/layout/SidebarNav';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
   SunIcon,
   MoonIcon,
-  LogOutIcon,
   MessageSquareIcon,
   FileTextIcon,
-  UserIcon,
-  LayoutDashboardIcon,
-  UsersIcon,
-  GitBranchIcon,
 } from 'lucide-react';
 
 export const Route = createRoute({
@@ -45,9 +31,14 @@ export const Route = createRoute({
   component: DashboardLayout,
 });
 
+const navItems = [
+  { id: 'chat', icon: MessageSquareIcon, label: 'Chat Console', to: '/dashboard/chat' },
+  { id: 'docs', icon: FileTextIcon, label: 'Docs Console', to: '/dashboard/docs' },
+];
+
 function DashboardLayout() {
   const navigate = useNavigate();
-  const [theme, setTheme] = useState(() => getSavedTheme());
+  const [theme, setTheme] = useState<Theme>(() => getSavedTheme());
 
   useEffect(() => {
     applyTheme(theme);
@@ -71,140 +62,40 @@ function DashboardLayout() {
   return (
     <SidebarProvider>
       <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
-        <Sidebar className="border-r border-border bg-sidebar text-sidebar-foreground">
-          <SidebarHeader className="flex flex-col gap-2 p-4">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center rounded-lg bg-primary p-2 text-primary-foreground">
-                <LayoutDashboardIcon />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-semibold tracking-tight">MemMesh</span>
-                <span className="text-xs text-muted-foreground">Console Panel</span>
-              </div>
-            </div>
-          </SidebarHeader>
-
-          <Separator className="bg-sidebar-border" />
-
-          <SidebarContent className="flex flex-col gap-4 p-2">
-            <SidebarGroup>
-              <SidebarGroupLabel className="px-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">
-                Console
-              </SidebarGroupLabel>
-              <SidebarGroupContent className="mt-2">
-                <SidebarMenu className="flex flex-col gap-1">
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      render={
-                        <Link
-                          id="link-chat"
-                          to="/dashboard/chat"
-                          activeProps={{ className: 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' }}
-                          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                        >
-                          <MessageSquareIcon />
-                          <span>Chat Console</span>
-                        </Link>
-                      }
-                    />
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      render={
-                        <Link
-                          id="link-docs"
-                          to="/dashboard/docs"
-                          activeProps={{ className: 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' }}
-                          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                        >
-                          <FileTextIcon />
-                          <span>Docs Console</span>
-                        </Link>
-                      }
-                    />
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      render={
-                        <Link
-                          id="link-graph"
-                          to="/dashboard/graph"
-                          activeProps={{ className: 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' }}
-                          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                        >
-                          <GitBranchIcon />
-                          <span>Knowledge Graph</span>
-                        </Link>
-                      }
-                    />
-                  </SidebarMenuItem>
-                  {userRole === 'superadmin' && (
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
-                        render={
-                          <Link
-                            id="link-admin"
-                            to="/dashboard/admin"
-                            activeProps={{ className: 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' }}
-                            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                          >
-                            <UsersIcon />
-                            <span>Admin Panel</span>
-                          </Link>
-                        }
-                      />
-                    </SidebarMenuItem>
-                  )}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-
-          <SidebarFooter className="mt-auto flex flex-col gap-2 p-2">
-            <Separator className="bg-sidebar-border" />
-            <div className="flex items-center justify-between gap-2 p-2">
-              <div className="flex items-center gap-3 overflow-hidden">
-                <div className="flex items-center justify-center rounded-full bg-muted p-2 text-muted-foreground">
-                  <UserIcon />
-                </div>
-                <div className="flex flex-col overflow-hidden">
-                  <span className="truncate text-sm font-medium leading-none text-sidebar-foreground">
-                    {userEmail}
-                  </span>
-                  <span className="text-xs text-muted-foreground capitalize">
-                    {userRole}
-                  </span>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleLogout}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <LogOutIcon />
-              </Button>
-            </div>
-          </SidebarFooter>
-        </Sidebar>
+        <SidebarNav
+          navItems={navItems}
+          userEmail={userEmail}
+          userRole={userRole}
+          theme={theme}
+          onThemeToggle={handleToggleTheme}
+          onLogout={handleLogout}
+          isSuperAdmin={userRole === 'superadmin'}
+        />
 
         <SidebarInset className="flex flex-1 flex-col overflow-hidden">
-          <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-card px-6 text-card-foreground">
-            <div className="flex items-center gap-4">
-              <SidebarTrigger className="text-foreground" />
-              <Separator orientation="vertical" className="h-4 bg-border" />
-              <h1 id="dashboard-header" className="text-lg font-semibold tracking-tight">
+          <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/80 backdrop-blur-md px-5 text-card-foreground sticky top-0 z-10">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="text-foreground/60 hover:text-foreground transition-colors" />
+              <Separator orientation="vertical" className="h-4 bg-border/50" />
+              <h1 id="dashboard-header" className="text-sm font-semibold tracking-tight text-foreground/80">
                 Dashboard
               </h1>
             </div>
             <Button
               id="theme-toggle"
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               onClick={handleToggleTheme}
-              className="text-foreground"
+              className="text-foreground/60 hover:text-foreground hover:bg-accent/50 transition-all duration-300"
             >
-              {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+              <div className="relative size-[18px]">
+                <SunIcon className={`size-[18px] absolute inset-0 transition-all duration-300 ${
+                  theme === 'light' ? 'opacity-0 rotate-90 scale-0' : 'opacity-100 rotate-0 scale-100'
+                }`} />
+                <MoonIcon className={`size-[18px] absolute inset-0 transition-all duration-300 ${
+                  theme === 'light' ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-0'
+                }`} />
+              </div>
             </Button>
           </header>
 

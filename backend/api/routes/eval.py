@@ -20,7 +20,19 @@ def _get_deepeval_metrics():
     try:
         from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric
         from deepeval.test_case import LLMTestCase
-        return FaithfulnessMetric(threshold=0.5), AnswerRelevancyMetric(threshold=0.5), LLMTestCase
+        from deepeval.models import GeminiModel
+        from backend.config import settings
+
+        gemini_model = GeminiModel(
+            model=settings.GEMINI_MODEL,
+            api_key=settings.GEMINI_API_KEY,
+        )
+
+        return (
+            FaithfulnessMetric(threshold=0.5, model=gemini_model),
+            AnswerRelevancyMetric(threshold=0.5, model=gemini_model),
+            LLMTestCase,
+        )
     except Exception as e:
         logger.warning(f"Failed to initialize DeepEval metrics: {e}")
         return None, None, None

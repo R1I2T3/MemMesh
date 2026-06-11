@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     SEMANTIC_CACHE_TTL: int = 86400  # 24 hours
     SEMANTIC_CACHE_THRESHOLD: float = 0.92
 
-    RATE_LIMIT_LOGIN: str = "5/minute"
+    RATE_LIMIT_LOGIN: str = "30/minute"
     RATE_LIMIT_REGISTER: str = "3/minute"
     RATE_LIMIT_QUERY: str = "30/minute"
     RATE_LIMIT_GLOBAL: str = "100/minute"

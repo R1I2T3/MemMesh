@@ -27,7 +27,7 @@ test.describe('Admin UI E2E Tests', () => {
     // 2. Navigate to admin panel
     await adminLink.click();
     await expect(page).toHaveURL(/.*\/dashboard\/admin/);
-    await expect(page.locator('#admin-title')).toHaveText('Admin Panel Console');
+    await expect(page.locator('#admin-title')).toHaveText('Admin Panel');
 
     // 3. Create a team
     await page.locator('#team-name-input').fill(teamName);

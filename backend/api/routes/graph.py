@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends, Query
-from backend.auth.middleware import get_current_user, require_team_membership
+from backend.auth.middleware import require_team_membership
 from backend.db.neo4j import Neo4jManager
 
 logger = logging.getLogger(__name__)

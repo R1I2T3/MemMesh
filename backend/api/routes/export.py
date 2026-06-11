@@ -1,4 +1,3 @@
-import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -7,11 +6,10 @@ from backend.models import Message
 from backend.auth.middleware import get_current_user
 from backend.export.renderers import render_markdown, render_json, render_pdf
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["export"])
 
 
-@router.post("/sessions/{session_id}/export")
+@router.get("/sessions/{session_id}/export")
 def export_session(
     session_id: str,
     format: str = Query("md", pattern="^(md|json|pdf)$"),

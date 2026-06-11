@@ -14,16 +14,19 @@ interface EntityDetailPanelProps {
 
 export function EntityDetailPanel({ entity }: EntityDetailPanelProps) {
   const [neighbors, setNeighbors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const teamId = localStorage.getItem("active_team_id");
     if (!teamId) return;
+    setLoading(true);
     apiFetch(`/api/team/${teamId}/graph/explore?query=${entity.name}&limit=20`, {
       headers: { 'X-Active-Team-ID': teamId } as Record<string, string>,
     })
       .then((r) => r.json())
       .then((data) => setNeighbors(data.edges || []))
-      .catch(() => {});
+      .catch(() => setNeighbors([]))
+      .finally(() => setLoading(false));
   }, [entity]);
 
   return (
@@ -35,7 +38,10 @@ export function EntityDetailPanel({ entity }: EntityDetailPanelProps) {
       </p>
       <div className="mt-4">
         <h4 className="text-sm font-medium mb-2">Relationships</h4>
-        {neighbors.length === 0 && (
+        {loading && (
+          <p className="text-xs text-muted-foreground">Loading relationships...</p>
+        )}
+        {!loading && neighbors.length === 0 && (
           <p className="text-xs text-muted-foreground">
             No relationships found
           </p>

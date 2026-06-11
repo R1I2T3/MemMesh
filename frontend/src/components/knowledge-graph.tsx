@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 
 interface GraphNode {
@@ -25,8 +24,6 @@ export function KnowledgeGraph({
   edges,
   onNodeClick,
 }: KnowledgeGraphProps) {
-  const fgRef = useRef<any>();
-
   const graphData = {
     nodes: nodes.map((n) => ({ ...n, val: n.score })),
     links: edges.map((e) => ({
@@ -38,7 +35,6 @@ export function KnowledgeGraph({
 
   return (
     <ForceGraph2D
-      ref={fgRef}
       graphData={graphData}
       nodeLabel="name"
       nodeColor={(n: any) =>
@@ -52,8 +48,6 @@ export function KnowledgeGraph({
       linkDirectionalArrowLength={6}
       linkDirectionalParticles={2}
       onNodeClick={(node: any) => onNodeClick?.(node)}
-      width={800}
-      height={600}
     />
   );
 }

@@ -8,6 +8,88 @@ def test_neo4j_manager_lifecycle():
         manager.close()
         mock_driver.return_value.close.assert_called_once()
 
+def test_get_entities_for_explore_with_query():
+    Neo4jManager._multidb_supported = None
+    with patch("backend.db.neo4j.GraphDatabase.driver") as mock_driver:
+        mock_session = MagicMock()
+        mock_session.__enter__.return_value = mock_session
+        mock_driver.return_value.session.return_value = mock_session
+
+        mock_record = {"id": "e1", "name": "Entity 1", "type": "Concept", "score": 1.0}
+        mock_result = MagicMock()
+        mock_result.__iter__.return_value = [mock_record]
+        mock_session.run.return_value = mock_result
+
+        manager = Neo4jManager()
+        results = manager.get_entities_for_explore("team-1", "entity", 10)
+
+        assert len(results) == 1
+        assert results[0]["id"] == "e1"
+        assert results[0]["name"] == "Entity 1"
+        mock_session.run.assert_called_once()
+        call_kwargs = mock_session.run.call_args[1]
+        assert call_kwargs["q"] == "entity"
+        assert call_kwargs["limit"] == 10
+
+
+def test_get_entities_for_explore_without_query():
+    Neo4jManager._multidb_supported = None
+    with patch("backend.db.neo4j.GraphDatabase.driver") as mock_driver:
+        mock_session = MagicMock()
+        mock_session.__enter__.return_value = mock_session
+        mock_driver.return_value.session.return_value = mock_session
+
+        mock_record = {"id": "e2", "name": "Entity 2", "type": "Person", "score": 2.5}
+        mock_result = MagicMock()
+        mock_result.__iter__.return_value = [mock_record]
+        mock_session.run.return_value = mock_result
+
+        manager = Neo4jManager()
+        results = manager.get_entities_for_explore("team-1", "", 50)
+
+        assert len(results) == 1
+        assert results[0]["score"] == 2.5
+
+
+def test_get_relationships_for_explore_with_query():
+    Neo4jManager._multidb_supported = None
+    with patch("backend.db.neo4j.GraphDatabase.driver") as mock_driver:
+        mock_session = MagicMock()
+        mock_session.__enter__.return_value = mock_session
+        mock_driver.return_value.session.return_value = mock_session
+
+        mock_record = {"source": "e1", "type": "WORKS_AT", "target": "e2"}
+        mock_result = MagicMock()
+        mock_result.__iter__.return_value = [mock_record]
+        mock_session.run.return_value = mock_result
+
+        manager = Neo4jManager()
+        results = manager.get_relationships_for_explore("team-1", "entity", 10)
+
+        assert len(results) == 1
+        assert results[0]["source"] == "e1"
+        assert results[0]["type"] == "WORKS_AT"
+        assert results[0]["target"] == "e2"
+
+
+def test_get_relationships_for_explore_without_query():
+    Neo4jManager._multidb_supported = None
+    with patch("backend.db.neo4j.GraphDatabase.driver") as mock_driver:
+        mock_session = MagicMock()
+        mock_session.__enter__.return_value = mock_session
+        mock_driver.return_value.session.return_value = mock_session
+
+        mock_record = {"source": "e3", "type": "RELATES_TO", "target": "e4"}
+        mock_result = MagicMock()
+        mock_result.__iter__.return_value = [mock_record]
+        mock_session.run.return_value = mock_result
+
+        manager = Neo4jManager()
+        results = manager.get_relationships_for_explore("team-1", "", 50)
+
+        assert len(results) == 1
+
+
 def test_neo4j_write_and_get_entities():
     Neo4jManager._multidb_supported = None
     with patch("backend.db.neo4j.GraphDatabase.driver") as mock_driver:

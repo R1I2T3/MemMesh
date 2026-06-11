@@ -15,19 +15,36 @@ function GraphExplorer() {
   const [nodes, setNodes] = useState<any[]>([]);
   const [edges, setEdges] = useState<any[]>([]);
   const [selectedEntity, setSelectedEntity] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const teamId = localStorage.getItem("active_team_id");
 
   useEffect(() => {
     if (!teamId) return;
+    setLoading(true);
+    setError(null);
     apiFetch(`/api/team/${teamId}/graph/explore?limit=100`, {
       headers: { 'X-Active-Team-ID': teamId } as Record<string, string>,
     })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load graph data");
+        return r.json();
+      })
       .then((data) => {
         setNodes(data.nodes || []);
         setEdges(data.edges || []);
-      });
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, [teamId]);
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-96 text-muted-foreground">Loading graph...</div>;
+  }
+
+  if (error) {
+    return <div className="flex items-center justify-center h-96 text-destructive">Error: {error}</div>;
+  }
 
   return (
     <div className="flex gap-4 p-4">

@@ -102,7 +102,7 @@ def test_export_md_returns_markdown():
     seed_message(db)
     db.close()
 
-    res = client.post(
+    res = client.get(
         "/api/chat/sessions/session-1/export?format=md",
         headers=get_user_headers(),
     )
@@ -116,7 +116,7 @@ def test_export_json_returns_json():
     seed_message(db)
     db.close()
 
-    res = client.post(
+    res = client.get(
         "/api/chat/sessions/session-1/export?format=json",
         headers=get_user_headers(),
     )
@@ -132,7 +132,7 @@ def test_export_returns_content_disposition():
     seed_message(db)
     db.close()
 
-    res = client.post(
+    res = client.get(
         "/api/chat/sessions/session-1/export?format=md",
         headers=get_user_headers(),
     )
@@ -142,12 +142,12 @@ def test_export_returns_content_disposition():
 
 
 def test_export_requires_auth():
-    res = client.post("/api/chat/sessions/session-1/export?format=md")
+    res = client.get("/api/chat/sessions/session-1/export?format=md")
     assert res.status_code == 401
 
 
 def test_export_404_for_missing_session():
-    res = client.post(
+    res = client.get(
         "/api/chat/sessions/nonexistent/export?format=md",
         headers=get_user_headers(),
     )
@@ -159,7 +159,7 @@ def test_export_filters_by_user():
     seed_message(db, user_id="other-user")
     db.close()
 
-    res = client.post(
+    res = client.get(
         "/api/chat/sessions/session-1/export?format=md",
         headers=get_user_headers(),
     )

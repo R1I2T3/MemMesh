@@ -14,14 +14,17 @@ import {
   CopyIcon,
   CheckIcon,
 } from "lucide-react";
+import { PdfViewer } from "./pdf-viewer";
 
 export interface Citation {
   type?: "pdf" | "web" | string;
   content: string;
   source?: string;
   page?: number;
+  page_number?: number;
   bbox?: number[]; // [x1, y1, x2, y2] - can be normalized (0..1) or absolute points
   url?: string;
+  parent_id?: string;
 }
 
 interface CitationDrawerProps {
@@ -30,35 +33,9 @@ interface CitationDrawerProps {
   citation: Citation | null;
 }
 
-// Deterministic mockup of lines on a document page (y is % from top, start/end are % from left)
-const MOCK_PAGE_LINES = [
-  { y: 8, start: 8, end: 75 },
-  { y: 12, start: 8, end: 92 },
-  { y: 16, start: 8, end: 85 },
-  { y: 20, start: 8, end: 45 },
-
-  { y: 28, start: 8, end: 88 },
-  { y: 32, start: 8, end: 90 },
-  { y: 36, start: 8, end: 80 },
-  { y: 40, start: 8, end: 70 },
-  { y: 44, start: 8, end: 35 },
-
-  { y: 52, start: 8, end: 92 },
-  { y: 56, start: 8, end: 87 },
-  { y: 60, start: 8, end: 90 },
-  { y: 64, start: 8, end: 55 },
-
-  { y: 72, start: 8, end: 80 },
-  { y: 76, start: 8, end: 75 },
-  { y: 80, start: 8, end: 85 },
-  { y: 84, start: 8, end: 40 },
-
-  { y: 90, start: 8, end: 85 },
-  { y: 94, start: 8, end: 60 },
-];
-
 export function CitationDrawer({ isOpen, onOpenChange, citation }: CitationDrawerProps) {
   const [copied, setCopied] = React.useState(false);
+  const [showPdf, setShowPdf] = React.useState(false);
 
   const handleCopy = () => {
     if (!citation) return;
@@ -75,53 +52,6 @@ export function CitationDrawer({ isOpen, onOpenChange, citation }: CitationDrawe
 
   const isWeb = citation.type === "web" || !!citation.url;
   const displayName = citation.source || (isWeb ? "Web Source" : "Document.pdf");
-
-  // Helper to normalize bbox coordinates to percentages
-  const getNormalizedCoords = (bbox: number[] | undefined) => {
-    if (!bbox || bbox.length < 4) {
-      // Return a default mockup highlight if no bbox is provided
-      return { x: 8, y: 28, w: 84, h: 20 };
-    }
-
-    let [x1, y1, x2, y2] = bbox;
-    const maxVal = Math.max(x1, y1, x2, y2);
-
-    if (maxVal > 1.1) {
-      // Standard PDF point dimensions (typically letter 612x792 or A4 595x842)
-      // We will normalize using standard page size assumptions
-      const assumedWidth = 612;
-      const assumedHeight = 792;
-      x1 = (x1 / assumedWidth) * 100;
-      x2 = (x2 / assumedWidth) * 100;
-      y1 = (y1 / assumedHeight) * 100;
-      y2 = (y2 / assumedHeight) * 100;
-    } else {
-      // Already normalized values between 0 and 1
-      x1 = x1 * 100;
-      x2 = x2 * 100;
-      y1 = y1 * 100;
-      y2 = y2 * 100;
-    }
-
-    const x = Math.min(x1, x2);
-    const y = Math.min(y1, y2);
-    const w = Math.abs(x2 - x1);
-    const h = Math.abs(y2 - y1);
-
-    return {
-      x: Math.max(0, Math.min(95, x)),
-      y: Math.max(0, Math.min(95, y)),
-      w: Math.max(5, Math.min(100 - x, w)),
-      h: Math.max(5, Math.min(100 - y, h)),
-    };
-  };
-
-  const highlight = getNormalizedCoords(citation.bbox);
-
-  // Helper to check if a mock line intersects vertically with the highlight bounding box
-  const isLineHighlighted = (lineY: number) => {
-    return lineY >= highlight.y && lineY <= highlight.y + highlight.h;
-  };
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -247,7 +177,7 @@ export function CitationDrawer({ isOpen, onOpenChange, citation }: CitationDrawe
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Page View (Simulated)
+                  Document View
                 </h3>
                 {citation.bbox && (
                   <span className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
@@ -256,64 +186,27 @@ export function CitationDrawer({ isOpen, onOpenChange, citation }: CitationDrawe
                 )}
               </div>
 
-              {/* Simulated PDF container */}
-              <div className="flex justify-center">
-                <div className="relative w-full max-w-[280px] aspect-[1/1.414] bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl shadow-md overflow-hidden p-6 select-none group">
-                  {/* Watermark grid background */}
-                  <div className="absolute inset-0 grid grid-cols-6 grid-rows-8 opacity-[0.02] pointer-events-none">
-                    {Array.from({ length: 48 }).map((_, i) => (
-                      <div key={i} className="border border-slate-900" />
-                    ))}
-                  </div>
-
-                  {/* SVG Document lines */}
-                  <svg
-                    viewBox="0 0 100 141.4"
-                    className="w-full h-full"
-                    xmlns="http://www.w3.org/2000/svg"
+              {citation.parent_id && (
+                <div className="space-y-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPdf(!showPdf)}
+                    className="w-full"
                   >
-                    {/* Bounding Box Highlight Rect */}
-                    <rect
-                      x={highlight.x}
-                      y={highlight.y}
-                      width={highlight.w}
-                      height={highlight.h}
-                      rx="1"
-                      className="fill-indigo-600/15 stroke-indigo-600 dark:fill-indigo-400/20 dark:stroke-indigo-400 animate-pulse"
-                      strokeWidth="0.8"
-                      strokeDasharray="1, 0.5"
-                    />
-
-                    {/* Simulated Text Lines */}
-                    {MOCK_PAGE_LINES.map((line, idx) => {
-                      const highlighted = isLineHighlighted(line.y);
-                      return (
-                        <line
-                          key={idx}
-                          x1={line.start}
-                          y1={line.y}
-                          x2={line.end}
-                          y2={line.y}
-                          strokeWidth="1.2"
-                          strokeLinecap="round"
-                          className={
-                            highlighted
-                              ? "stroke-indigo-600/70 dark:stroke-indigo-400/70"
-                              : "stroke-slate-200 dark:stroke-slate-800"
-                          }
-                        />
-                      );
-                    })}
-                  </svg>
-
-                  {/* PDF Bounding Box Hover Tag */}
-                  <div className="absolute inset-0 bg-transparent flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none duration-300">
-                    <div className="bg-indigo-600/90 text-white text-[10px] px-2 py-1 rounded shadow-lg font-medium tracking-wide">
-                      Text Segment Highlighted
+                    {showPdf ? "Hide PDF" : "View in Document"}
+                  </Button>
+                  {showPdf && (
+                    <div className="max-h-96 overflow-auto rounded-lg border">
+                      <PdfViewer
+                        docId={citation.parent_id}
+                        pageNumber={citation.page_number || citation.page || 1}
+                        bbox={citation.bbox}
+                      />
                     </div>
-                  </div>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>

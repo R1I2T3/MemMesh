@@ -22,6 +22,7 @@ from backend.api.routes.feedback import router as feedback_router
 from backend.api.routes.eval import router as eval_router
 from backend.api.routes.decay import router as decay_router
 from backend.api.routes.analytics import router as analytics_router
+from backend.api.routes.documents import router as documents_router
 from backend.db.weaviate import WeaviateManager
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,7 @@ app.include_router(feedback_router)
 app.include_router(eval_router)
 app.include_router(decay_router)
 app.include_router(analytics_router)
+app.include_router(documents_router)
 
 @app.get("/api/health")
 def health(db: Session = Depends(get_db)):
